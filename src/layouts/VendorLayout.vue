@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth.store'
 
@@ -8,78 +8,494 @@ const authStore = useAuthStore()
 
 const userRole = computed(() => authStore.user?.role?.toUpperCase() || 'MERCHANT_OWNER')
 
+// Sidebar collapse state
+const isCollapsed = ref(false)
+const toggleSidebar = () => {
+  isCollapsed.value = !isCollapsed.value
+}
+
+// Transaksi sub-menu expand
+const isTransaksiOpen = ref(false)
+const toggleTransaksi = () => {
+  isTransaksiOpen.value = !isTransaksiOpen.value
+}
+
 const menuItems = computed(() => {
-  const baseItems = [
-    { 
-      name: 'Beranda', 
-      path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/dashboard' : '/vendor/dashboard', 
-      icon: 'home' 
+  const items = [
+    {
+      name: 'Beranda',
+      path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/dashboard' : '/vendor/dashboard',
+      icon: 'home',
     },
-    { 
-      name: 'Katalog', 
-      path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/catalog' : '/vendor/catalog', 
-      icon: 'catalog' 
+    {
+      name: 'Toko saya',
+      path: '/vendor/my-store',
+      icon: 'store',
     },
-    { name: 'Keuangan', path: '/vendor/finance', icon: 'wallet' },
-    { 
-      name: 'Pesanan', 
-      path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/orders' : '/vendor/orders', 
-      icon: 'hammer' 
+    {
+      name: 'Layanan',
+      path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/catalog' : '/vendor/catalog',
+      icon: 'service',
     },
-    { name: 'Pengaturan', path: '/vendor/settings', icon: 'settings' },
-    { name: 'Laporan', path: '/vendor/reports', icon: 'report' },
-    { name: 'Pesan', path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/messages' : '/vendor/messages', icon: 'document' },
-    { name: 'Peringatan', path: '/vendor/alerts', icon: 'alert' },
-    { name: 'Bantuan', path: '/vendor/help', icon: 'wrench' },
+    {
+      name: 'Pesan & Penawaran',
+      path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/messages' : '/vendor/messages',
+      icon: 'chat',
+    },
+    {
+      name: 'Operasional Order',
+      path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/orders' : '/vendor/orders',
+      icon: 'package',
+    },
+    {
+      name: 'Transaksi',
+      path: '/vendor/finance',
+      icon: 'wallet',
+      children: [
+        { name: 'Riwayat transaksi', path: '/vendor/finance/history' },
+      ],
+    },
   ]
 
-  // Filter Keuangan for associates
+  // Filter finance for associates
   if (userRole.value === 'MERCHANT_ASSOCIATE') {
-    return baseItems.filter(item => item.icon !== 'wallet')
+    return items.filter(item => item.icon !== 'wallet')
   }
 
-  return baseItems
+  return items
 })
 
 const currentPath = computed(() => route.path)
+
+const isActive = (path: string) => currentPath.value === path
+const isParentActive = (item: any) => {
+  if (isActive(item.path)) return true
+  if (item.children) {
+    return item.children.some((c: any) => isActive(c.path))
+  }
+  return false
+}
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#FAF9F9] flex p-6 gap-8 font-sans text-gray-800">
-    <!-- Sidebar Container (Collapsed by default for Vendor design) -->
-    <aside class="sticky top-6 self-start transition-all duration-300 z-40 flex flex-col w-[72px]">
-      <div class="bg-[#1E3A8A] text-white rounded-3xl flex flex-col items-center py-6 shadow-xl overflow-hidden min-h-[600px]">
-        <nav class="flex flex-col gap-4 px-3 w-full items-center">
-          <router-link
-            v-for="item in menuItems"
-            :key="item.path"
-            :to="item.path"
-            :class="[
-              'w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 group',
-              currentPath === item.path
-                ? 'bg-white/20 text-white shadow-sm'
-                : 'text-white/60 hover:bg-white/10 hover:text-white',
-            ]"
-            :title="item.name"
-          >
-            <!-- Icons -->
-            <svg v-if="item.icon === 'home'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-            <svg v-else-if="item.icon === 'catalog'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-            <svg v-else-if="item.icon === 'wallet'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-            <svg v-else-if="item.icon === 'hammer'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>
-            <svg v-else-if="item.icon === 'settings'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            <svg v-else-if="item.icon === 'report'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            <svg v-else-if="item.icon === 'document'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-            <svg v-else-if="item.icon === 'alert'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            <svg v-else-if="item.icon === 'wrench'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          </router-link>
+  <div class="vendor-layout">
+    <!-- Sidebar -->
+    <aside
+      class="sidebar"
+      :class="{ collapsed: isCollapsed }"
+    >
+      <div class="sidebar-inner">
+        <!-- Toggle Button -->
+        <button class="toggle-btn" @click="toggleSidebar" :title="isCollapsed ? 'Perluas' : 'Perkecil'">
+          <svg class="toggle-icon" :class="{ rotated: isCollapsed }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+        </button>
+
+        <!-- Navigation -->
+        <nav class="sidebar-nav">
+          <template v-for="item in menuItems" :key="item.path">
+            <!-- Item WITH children (Transaksi) -->
+            <div v-if="item.children" class="nav-group">
+              <button
+                class="nav-item"
+                :class="{ active: isParentActive(item) }"
+                @click="toggleTransaksi"
+                :title="item.name"
+              >
+                <span class="nav-icon">
+                  <!-- Wallet / Transaksi icon -->
+                  <svg v-if="item.icon === 'wallet'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </span>
+                <span class="nav-label">{{ item.name }}</span>
+                <svg class="chevron" :class="{ open: isTransaksiOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              <!-- Sub-items -->
+              <Transition name="submenu">
+                <div v-if="isTransaksiOpen && !isCollapsed" class="sub-items">
+                  <router-link
+                    v-for="child in item.children"
+                    :key="child.path"
+                    :to="child.path"
+                    class="sub-item"
+                    :class="{ active: isActive(child.path) }"
+                  >
+                    <span class="sub-line"></span>
+                    <span class="sub-label">{{ child.name }}</span>
+                  </router-link>
+                </div>
+              </Transition>
+            </div>
+
+            <!-- Regular item -->
+            <router-link
+              v-else
+              :to="item.path"
+              class="nav-item"
+              :class="{ active: isActive(item.path) }"
+              :title="item.name"
+            >
+              <span class="nav-icon">
+                <!-- Home -->
+                <svg v-if="item.icon === 'home'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <!-- Store -->
+                <svg v-else-if="item.icon === 'store'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 3h18l-2 8H5L3 3zm0 0l-1 9h20l-1-9M5 21h14a1 1 0 001-1v-5H4v5a1 1 0 001 1z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 21v-4h6v4" />
+                </svg>
+                <!-- Service / Layanan -->
+                <svg v-else-if="item.icon === 'service'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+                <!-- Chat / Pesan -->
+                <svg v-else-if="item.icon === 'chat'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <!-- Package / Operasional -->
+                <svg v-else-if="item.icon === 'package'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </span>
+              <span class="nav-label">{{ item.name }}</span>
+            </router-link>
+          </template>
         </nav>
       </div>
     </aside>
 
     <!-- Main Content Area -->
-    <div class="flex-1 w-full max-w-[1400px] mx-auto bg-[#FAF9F9]">
+    <div class="main-content" :class="{ 'collapsed-sidebar': isCollapsed }">
       <router-view />
     </div>
   </div>
 </template>
+
+<style scoped>
+/* ============================================
+   VENDOR SIDEBAR LAYOUT
+   Design: Sky-blue rounded sidebar, collapsible
+   ============================================ */
+
+.vendor-layout {
+  min-height: 100vh;
+  background: #FAF9F9;
+  display: flex;
+  padding: 20px;
+  gap: 24px;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: #1e293b;
+}
+
+/* --- Sidebar --- */
+.sidebar {
+  position: sticky;
+  top: 20px;
+  align-self: flex-start;
+  width: 260px;
+  min-width: 260px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 40;
+}
+
+.sidebar.collapsed {
+  width: 72px;
+  min-width: 72px;
+}
+
+.sidebar-inner {
+  background: linear-gradient(180deg, #5BB0FF 0%, #4DA3FF 40%, #3B93F0 100%);
+  border-radius: 24px;
+  padding: 16px 10px 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+  box-shadow:
+    0 4px 24px rgba(77, 163, 255, 0.25),
+    0 1px 4px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+/* --- Toggle Button --- */
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  cursor: pointer;
+  margin: 0 auto 16px;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.toggle-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle-icon.rotated {
+  transform: rotate(180deg);
+}
+
+/* --- Navigation --- */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  position: relative;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 600;
+}
+
+/* --- Nav Icon --- */
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.nav-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* --- Nav Label --- */
+.nav-label {
+  opacity: 1;
+  transition: opacity 0.2s ease 0.1s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar.collapsed .nav-label {
+  opacity: 0;
+  width: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* --- Chevron (Transaksi expand) --- */
+.chevron {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.sidebar.collapsed .chevron {
+  opacity: 0;
+  width: 0;
+  margin: 0;
+}
+
+/* --- Sub-items (Riwayat transaksi) --- */
+.sub-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 20px;
+  margin-top: 2px;
+}
+
+.sub-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 450;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.sub-item:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sub-item.active {
+  color: white;
+  font-weight: 600;
+}
+
+.sub-line {
+  width: 16px;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.sub-item.active .sub-line {
+  background: white;
+}
+
+/* --- Sub-menu transition --- */
+.submenu-enter-active {
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+.submenu-leave-active {
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+.submenu-enter-from,
+.submenu-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-4px);
+}
+.submenu-enter-to,
+.submenu-leave-from {
+  opacity: 1;
+  max-height: 100px;
+  transform: translateY(0);
+}
+
+/* --- Nav Group --- */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Main Content --- */
+.main-content {
+  flex: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  background: #FAF9F9;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+}
+
+/* --- Collapsed sidebar adjustments --- */
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 12px 0;
+  gap: 0;
+}
+
+.sidebar.collapsed .sub-items {
+  display: none;
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+  .vendor-layout {
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .sidebar {
+    position: relative;
+    top: 0;
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  .sidebar-inner {
+    flex-direction: row;
+    min-height: auto;
+    padding: 10px 12px;
+    border-radius: 16px;
+    overflow-x: auto;
+    gap: 4px;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    gap: 2px;
+  }
+
+  .toggle-btn {
+    display: none;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .chevron {
+    display: none;
+  }
+
+  .sub-items {
+    display: none;
+  }
+
+  .nav-item {
+    padding: 8px;
+    justify-content: center;
+  }
+}
+
+/* --- Reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .toggle-icon,
+  .nav-item,
+  .nav-label,
+  .chevron,
+  .submenu-enter-active,
+  .submenu-leave-active {
+    transition: none !important;
+  }
+}
+</style>

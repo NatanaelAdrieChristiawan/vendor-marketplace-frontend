@@ -35,6 +35,7 @@ import VendorDashboardView from '../views/vendor/DashboardView.vue'
 import DocumentVerificationView from '../views/vendor/DocumentVerificationView.vue'
 import CatalogView from '../views/vendor/CatalogView.vue'
 import AddGigView from '../views/vendor/AddGigView.vue'
+import MyStoreView from '../views/vendor/MyStoreView.vue'
 
 const routes = [
   // ========================================
@@ -301,6 +302,11 @@ const routes = [
         component: VendorDashboardView,
       },
       {
+        path: 'my-store',
+        name: 'VendorMyStore',
+        component: MyStoreView,
+      },
+      {
         path: 'associate/dashboard',
         name: 'VendorAssociateDashboard',
         component: () => import('../views/vendor/AssociateDashboardView.vue'),
@@ -328,6 +334,11 @@ const routes = [
       {
         path: 'finance',
         name: 'VendorFinance',
+        component: () => import('../views/vendor/WalletView.vue'),
+      },
+      {
+        path: 'finance/history',
+        name: 'VendorTransactionHistory',
         component: () => import('../views/vendor/WalletView.vue'),
       },
       {
