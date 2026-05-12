@@ -347,6 +347,11 @@ const routes = [
         component: () => import('../views/vendor/WithdrawView.vue'),
       },
       {
+        path: 'associates',
+        name: 'VendorAssociates',
+        component: () => import('../views/vendor/AssociateManagementView.vue'),
+      },
+      {
         path: 'orders',
         name: 'VendorOrders',
         component: () => import('../views/vendor/TasksView.vue'),

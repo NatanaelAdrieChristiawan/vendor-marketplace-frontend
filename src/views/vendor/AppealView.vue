@@ -1,131 +1,158 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
-const isAppealModalOpen = ref(false)
+const router = useRouter()
 
-const openAppealModal = () => {
-  isAppealModalOpen.value = true
+// Mock data
+const orderId = '#ORD-8829'
+const orderTitle = 'Desain Logo'
+const orderPrice = 'Rp 750.000'
+const decisionDate = '30 April 2026, 09:14'
+const resolvedDate = '30 April 2026, 14:22'
+
+// Toggle for demonstration: 'win' or 'lose'
+const disputeResult = ref<'win' | 'lose'>('win')
+
+function toggleResult() {
+  disputeResult.value = disputeResult.value === 'win' ? 'lose' : 'win'
 }
 
-const closeAppealModal = () => {
-  isAppealModalOpen.value = false
+function goBack() {
+  router.push('/vendor/orders')
 }
 </script>
 
 <template>
-  <div class="py-6 px-4">
-    <div class="mb-10">
-      <h1 class="text-[32px] font-bold text-gray-900 mb-1">Deskripsi Tugas</h1>
-      <p class="text-gray-500 italic font-medium">Pesanan Dalam Investigasi Admin</p>
+  <div class="py-6 px-4 max-w-5xl">
+    <!-- Back Button & Breadcrumbs -->
+    <div class="flex items-center gap-2 text-sm text-gray-500 mb-6">
+      <button @click="goBack" class="hover:text-gray-900 transition-colors p-1 -ml-1">
+        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+      </button>
+      <span>Sengketa</span>
+      <span class="mx-1">&rsaquo;</span>
+      <span class="font-bold text-gray-900">{{ orderId }}</span>
     </div>
 
-    <div class="max-w-4xl bg-white rounded-[32px] border border-gray-100 shadow-sm p-8 space-y-8">
-      <div class="flex justify-between items-start">
-        <div class="space-y-1">
-          <span class="text-xs font-bold text-[#4B6BFB]">#ORD-8790</span>
-          <h2 class="text-2xl font-bold text-gray-900">Penulisan Konten</h2>
-          <p class="text-sm font-medium text-gray-500">Paket Premium</p>
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-[32px] font-bold text-gray-900">
+        {{ orderId }} | {{ orderTitle }}
+      </h1>
+      <span
+        v-if="disputeResult === 'win'"
+        class="px-4 py-1.5 text-xs font-bold text-[#059669] bg-[#ECFDF5] border border-[#A7F3D0] rounded-full uppercase tracking-wider"
+      >
+        COMPLETED
+      </span>
+      <span
+        v-else
+        class="px-4 py-1.5 text-xs font-bold text-[#E11D48] bg-[#FFF1F2] border border-[#FECDD3] rounded-full uppercase tracking-wider"
+      >
+        CANCELLED
+      </span>
+    </div>
+
+    <div class="space-y-6">
+      <!-- Verdict Banner -->
+      <div
+        v-if="disputeResult === 'win'"
+        class="bg-[#F0FDF4] border border-[#BBF7D0] rounded-2xl p-6 flex items-start gap-4"
+      >
+        <div class="w-10 h-10 rounded-full bg-[#86EFAC] text-[#166534] flex items-center justify-center shrink-0 mt-1">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
         </div>
-        <span class="px-4 py-1.5 bg-[#FFF2EB] text-[#FF6B00] text-xs font-bold rounded-full">Due Today</span>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <img src="https://i.pravatar.cc/150?u=ammi" class="w-10 h-10 rounded-full object-cover" />
-        <span class="font-bold text-gray-900">Ammi Watts</span>
-      </div>
-
-      <div class="space-y-4">
-        <h3 class="text-base font-bold text-gray-900">Penjelasan dari Client</h3>
-        <div class="p-6 border border-[#4B6BFB] rounded-2xl bg-white">
-          <p class="text-sm text-gray-500 leading-relaxed italic">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+        <div>
+          <h3 class="text-[18px] font-bold text-[#166534] mb-1">Kamu memenangkan kasus ini</h3>
+          <p class="text-sm font-medium text-[#166534]/80 mb-3">REJECT-COMPLAINT - {{ resolvedDate }}</p>
+          <p class="text-sm text-[#166534] leading-relaxed">
+            Admin Validator telah memutuskan bahwa komplain client tidak valid. Hasil kerja kamu dinilai sudah sesuai brief yang disepakati.
           </p>
         </div>
       </div>
-    </div>
 
-    <div class="mt-12 max-w-4xl">
-      <button 
-        @click="openAppealModal"
-        class="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/95 text-white py-4 px-8 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl group"
+      <div
+        v-else
+        class="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl p-6 flex items-start gap-4"
       >
-        <span class="text-xl font-bold">Hubungi Super Admin</span>
-        <div class="bg-white w-8 h-8 rounded-full flex items-center justify-center transition-transform group-hover:translate-x-1">
-          <svg class="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
-          </svg>
+        <div class="w-10 h-10 rounded-full bg-[#FECACA] text-[#991B1B] flex items-center justify-center shrink-0 mt-1">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
         </div>
-      </button>
-    </div>
+        <div>
+          <h3 class="text-[18px] font-bold text-[#991B1B] mb-1">Kasus Ditutup</h3>
+          <p class="text-sm font-medium text-[#991B1B]/80 mb-3">ACCEPT-COMPLAINT - {{ resolvedDate }}</p>
+          <p class="text-sm text-[#991B1B] leading-relaxed">
+            Admin Validator telah memutuskan bahwa komplain client valid. Dana akan dikembalikan kepada client.
+          </p>
+        </div>
+      </div>
 
-    <!-- Appeal Modal -->
-    <Teleport to="body">
-      <div v-if="isAppealModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-        <div class="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
-          <div class="bg-[#1E3A8A] px-6 py-4 flex justify-between items-center text-white">
-            <h3 class="text-xl font-bold">Ajukan Banding</h3>
-            <button @click="closeAppealModal" class="hover:bg-white/10 p-1 rounded-lg transition-colors">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+      <!-- Details Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Dana Order Card -->
+        <div class="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6">DANA ORDER</h4>
+          <div
+            class="rounded-2xl p-6 flex items-center justify-between"
+            :class="disputeResult === 'win' ? 'bg-[#F8FAFC]' : 'bg-[#FFF1F2]'"
+          >
+            <div>
+              <p class="text-sm font-medium text-gray-500 mb-1">Total nilai order</p>
+              <p class="text-3xl font-bold text-[#991B1B]" v-if="disputeResult === 'lose'">{{ orderPrice }}</p>
+              <p class="text-3xl font-bold text-gray-900" v-else>{{ orderPrice }}</p>
+            </div>
+            
+            <span
+              v-if="disputeResult === 'win'"
+              class="px-4 py-1.5 text-[11px] font-bold text-[#059669] bg-[#ECFDF5] border border-[#A7F3D0] rounded-full uppercase tracking-widest"
+            >
+              SELESAI
+            </span>
+            <span
+              v-else
+              class="px-4 py-1.5 text-[11px] font-bold text-[#E11D48] bg-transparent border border-[#E11D48] rounded-full uppercase tracking-widest"
+            >
+              Refund
+            </span>
           </div>
+        </div>
+
+        <!-- Detail Order Card -->
+        <div class="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-8">DETAIL ORDER</h4>
           
-          <div class="p-6 space-y-6">
-            <!-- Info Alert -->
-            <div class="bg-[#F8F9FA] rounded-xl p-4 flex gap-4 items-start border border-gray-100">
-              <div class="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
-                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </div>
-              <p class="text-sm text-gray-500 font-medium pt-1 leading-relaxed">
-                Mohon konfirmasi dan komunikasi dengan client, terkait jasa atau barang yang ditawarkan
-              </p>
+          <div class="space-y-6">
+            <div class="flex items-center justify-between pb-6 border-b border-gray-100">
+              <span class="text-sm font-bold text-gray-500">Keputusan</span>
+              <span class="text-sm font-bold text-gray-900">{{ decisionDate }}</span>
             </div>
-
-            <!-- Order Data Card -->
-            <div class="border border-gray-100 rounded-2xl p-6 space-y-4 bg-[#FFFAF5]/30">
-              <h4 class="text-base font-bold text-gray-900">Data Pesanan:</h4>
-              <ul class="space-y-3 text-sm">
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Client: <span class="underline">Ammi Watts</span></span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Nomor Pesanan: ORD-8790</span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Di Ajukan Jam: 00:00</span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Pembayaran: Transfer Bank-Bank Mandiri (VA)</span>
-                </li>
-              </ul>
-            </div>
-
-            <!-- Screenshot Proof -->
-            <div class="border border-gray-100 rounded-2xl p-6 space-y-4">
-              <h4 class="text-base font-bold text-gray-900">Bukti Screenshot</h4>
-              <div class="flex flex-wrap gap-3">
-                <div class="bg-[#1E3A8A] text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs font-bold shadow-md">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  File_1234.JPEG
-                </div>
-                <div class="bg-[#1E3A8A] text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs font-bold shadow-md">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  File_1234.JPEG
-                </div>
-              </div>
-            </div>
-
-            <div class="flex justify-end pt-2">
-              <button class="px-8 py-4 bg-[#1E3A8A] text-white font-bold rounded-2xl hover:bg-[#1E3A8A]/95 transition-all shadow-xl">
-                Laporkan Ke Admin
-              </button>
+            
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-gray-500">Status Order</span>
+              <span
+                v-if="disputeResult === 'win'"
+                class="px-4 py-1.5 text-[11px] font-bold text-[#059669] bg-[#ECFDF5] border border-[#A7F3D0] rounded-full uppercase tracking-widest"
+              >
+                SELESAI
+              </span>
+              <span
+                v-else
+                class="px-4 py-1.5 text-[11px] font-bold text-[#E11D48] bg-[#FFF1F2] border border-[#FECDD3] rounded-full uppercase tracking-widest"
+              >
+                CANCELLED
+              </span>
             </div>
           </div>
         </div>
       </div>
-    </Teleport>
+    </div>
+
+    <!-- Temporary button to toggle state for demonstration -->
+    <div class="mt-12 text-center">
+      <button @click="toggleResult" class="text-xs font-bold text-gray-400 hover:text-gray-600 underline">
+        Toggle Win/Lose State (Demo)
+      </button>
+    </div>
   </div>
 </template>

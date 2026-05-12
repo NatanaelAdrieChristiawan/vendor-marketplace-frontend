@@ -33,6 +33,11 @@ const menuItems = computed(() => {
       icon: 'store',
     },
     {
+      name: 'Associate Toko',
+      path: '/vendor/associates',
+      icon: 'users',
+    },
+    {
       name: 'Layanan',
       path: userRole.value === 'MERCHANT_ASSOCIATE' ? '/vendor/associate/catalog' : '/vendor/catalog',
       icon: 'service',
@@ -149,6 +154,10 @@ const isParentActive = (item: any) => {
                 <svg v-else-if="item.icon === 'store'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 3h18l-2 8H5L3 3zm0 0l-1 9h20l-1-9M5 21h14a1 1 0 001-1v-5H4v5a1 1 0 001 1z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 21v-4h6v4" />
+                </svg>
+                <!-- Users / Associate Toko -->
+                <svg v-else-if="item.icon === 'users'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
                 <!-- Service / Layanan -->
                 <svg v-else-if="item.icon === 'service'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
