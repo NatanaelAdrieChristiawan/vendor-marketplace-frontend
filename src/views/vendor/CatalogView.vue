@@ -1,208 +1,682 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import Button from '../../components/ui/Button.vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
-const gigs = ref([
+const router = useRouter()
+
+type GigStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'RESTRICTED'
+
+interface Gig {
+  id: number
+  title: string
+  description: string
+  price: number
+  status: GigStatus
+  images: string[]
+  isPromoted: boolean
+  rejectionNote?: string
+}
+
+const activeTab = ref<'all' | 'pending' | 'approved' | 'rejected' | 'draft'>('all')
+
+const tabs = [
+  { key: 'all', label: 'Semua' },
+  { key: 'pending', label: 'Menunggu' },
+  { key: 'approved', label: 'Disetujui' },
+  { key: 'rejected', label: 'Ditolak' },
+  { key: 'draft', label: 'Draf' },
+]
+
+const gigs = ref<Gig[]>([
   {
     id: 1,
-    title: 'Jasa Desain Keren Banget',
-    description: 'Lorem ipsum dolor sit...',
-    packages: ['basic', 'standard', 'premium'],
-    isPromoted: true,
-    media: [
-      { type: 'image', name: 'File_1234.JPEG' },
-      { type: 'video', name: 'File_1234.MOV' }
-    ]
+    title: 'Desain logo',
+    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
+    price: 45000,
+    status: 'RESTRICTED',
+    images: ['/placeholder-gig.jpg'],
+    isPromoted: false,
   },
   {
     id: 2,
-    title: 'Jasa Fotografi Wisuda',
-    description: 'Lorem ipsum dolor sit...',
-    packages: ['standard', 'premium'],
-    media: [
-      { type: 'video', name: 'File_1234.MOV' }
-    ]
+    title: 'Desain logo',
+    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
+    price: 45000,
+    status: 'ACTIVE',
+    images: ['/placeholder-gig.jpg'],
+    isPromoted: true,
   },
   {
     id: 3,
-    title: 'Jasa Videogafi Gokil',
-    description: 'Lorem ipsum dolor sit...',
-    packages: ['basic', 'standard'],
-    media: [
-      { type: 'image', name: 'File_1234.JPEG' }
-    ]
+    title: 'Desain logo',
+    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
+    price: 45000,
+    status: 'PENDING',
+    images: ['/placeholder-gig.jpg'],
+    isPromoted: false,
   },
   {
     id: 4,
-    title: 'Stock Photo 32 Pcs',
-    description: 'Lorem ipsum dolor sit...',
-    packages: ['premium'],
-    media: [
-      { type: 'image', name: 'File_1234.JPEG' },
-      { type: 'video', name: 'File_1234.MOV' }
-    ]
-  }
+    title: 'Desain logo',
+    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
+    price: 45000,
+    status: 'REJECTED',
+    images: ['/placeholder-gig.jpg'],
+    isPromoted: false,
+    rejectionNote: 'Harga terlalu rendah untuk posisi brand saat ini. Sesuaikan minimal menjadi Rp50.000',
+  },
+  {
+    id: 5,
+    title: 'Desain logo',
+    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
+    price: 45000,
+    status: 'DRAFT',
+    images: ['/placeholder-gig.jpg'],
+    isPromoted: false,
+  },
 ])
+
+const showRejectionNote = ref<number | null>(null)
+
+const filteredGigs = computed(() => {
+  if (activeTab.value === 'all') return gigs.value
+  const map: Record<string, GigStatus[]> = {
+    pending: ['PENDING'],
+    approved: ['ACTIVE', 'RESTRICTED'],
+    rejected: ['REJECTED'],
+    draft: ['DRAFT'],
+  }
+  return gigs.value.filter(g => map[activeTab.value]?.includes(g.status))
+})
+
+function formatPrice(n: number) {
+  return 'Rp' + n.toLocaleString('id-ID')
+}
+
+function statusLabel(s: GigStatus) {
+  const m: Record<GigStatus, string> = {
+    ACTIVE: 'AKTIF',
+    PENDING: 'MENUNGGU PERSETUJUAN',
+    REJECTED: 'DITOLAK',
+    DRAFT: 'DRAF',
+    RESTRICTED: 'DIBATASI',
+  }
+  return m[s]
+}
+
+function statusClass(s: GigStatus) {
+  const m: Record<GigStatus, string> = {
+    ACTIVE: 'badge-active',
+    PENDING: 'badge-pending',
+    REJECTED: 'badge-rejected',
+    DRAFT: 'badge-draft',
+    RESTRICTED: 'badge-restricted',
+  }
+  return m[s]
+}
+
+function toggleNote(id: number) {
+  showRejectionNote.value = showRejectionNote.value === id ? null : id
+}
+
+function deleteGig(id: number) {
+  gigs.value = gigs.value.filter(g => g.id !== id)
+}
 </script>
 
 <template>
-  <div class="py-2 pb-12">
+  <div class="catalog-page">
     <!-- Header -->
-    <div class="mb-8">
-      <h1 class="text-xl font-medium text-gray-800">Dashboard Overview</h1>
+    <h1 class="page-title">Manajemen Layanan</h1>
+
+    <!-- Tabs + CTA -->
+    <div class="tabs-row">
+      <div class="tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="tab-btn"
+          :class="{ active: activeTab === tab.key }"
+          @click="activeTab = tab.key as any"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+      <router-link to="/vendor/catalog/add" class="btn-create">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Buat Layanan Baru
+      </router-link>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-      <!-- Card 1 -->
-      <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col">
-        <div class="w-10 h-10 rounded-lg bg-blue-50 text-brand-blue flex items-center justify-center mb-4">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+    <!-- Cards Grid -->
+    <div class="cards-grid">
+      <div
+        v-for="gig in filteredGigs"
+        :key="gig.id"
+        class="gig-card"
+        :class="{ 'is-draft': gig.status === 'DRAFT' }"
+      >
+        <!-- Thumbnail -->
+        <div class="gig-thumb">
+          <div class="thumb-placeholder">
+            <svg class="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          </div>
+          <span v-if="gig.status !== 'DRAFT'" class="status-badge" :class="statusClass(gig.status)">
+            {{ statusLabel(gig.status) }}
+          </span>
         </div>
-        <div class="text-3xl font-bold text-gray-900 mb-2">12</div>
-        <p class="text-gray-500 text-sm leading-relaxed">Vendor baru yang membutuhkan validasi</p>
+
+        <!-- Info -->
+        <div class="gig-info">
+          <h3 class="gig-title">{{ gig.title }}</h3>
+          <p class="gig-desc">{{ gig.description }}</p>
+          <div class="gig-footer">
+            <span class="gig-price">{{ formatPrice(gig.price) }}</span>
+            <button
+              v-if="gig.status !== 'DRAFT' && gig.status !== 'REJECTED'"
+              class="edit-btn"
+              @click="router.push(`/vendor/catalog/edit/${gig.id}`)"
+              title="Edit"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+          </div>
+
+          <!-- Promotion badge -->
+          <div v-if="gig.status === 'RESTRICTED' && !gig.isPromoted" class="promo-disabled">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            PROMOSI DINONAKTIFKAN
+          </div>
+
+          <button v-if="gig.isPromoted && gig.status === 'ACTIVE'" class="boost-btn" @click="router.push(`/vendor/catalog/promote/${gig.id}`)">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            BOOST LAYANAN
+          </button>
+
+          <!-- Pending info -->
+          <div v-if="gig.status === 'PENDING'" class="pending-info">
+            <span class="pending-dot"></span>
+            Menunggu review
+          </div>
+
+          <!-- Rejected note -->
+          <div v-if="gig.status === 'REJECTED'" class="rejected-actions">
+            <button class="note-btn" @click="toggleNote(gig.id)">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>
+              LIHAT CATATAN
+            </button>
+          </div>
+          <Transition name="note-fade">
+            <div v-if="showRejectionNote === gig.id && gig.rejectionNote" class="rejection-note">
+              "{{ gig.rejectionNote }}"
+            </div>
+          </Transition>
+
+          <!-- Draft actions -->
+          <div v-if="gig.status === 'DRAFT'" class="draft-actions">
+            <button class="btn-continue" @click="router.push(`/vendor/catalog/edit/${gig.id}`)">
+              Lanjutkan edit
+            </button>
+            <button class="btn-delete" @click="deleteGig(gig.id)" title="Hapus">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <!-- Card 2 -->
-      <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col">
-        <div class="w-10 h-10 rounded-lg bg-red-50 text-red-500 flex items-center justify-center mb-4">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>
+      <!-- Add New Card -->
+      <div class="gig-card add-card" @click="router.push('/vendor/catalog/add')">
+        <div class="add-card-inner">
+          <div class="add-icon">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m8-8H4"/></svg>
+          </div>
+          <h3 class="add-title">Tambah Gig Lainnya</h3>
+          <p class="add-desc">Punya keahlian baru? Buat gig tambahan untuk menjangkau lebih banyak klien.</p>
+          <span class="add-link">Mulai Membuat</span>
         </div>
-        <div class="text-3xl font-bold text-gray-900 mb-2">5</div>
-        <p class="text-gray-500 text-sm leading-relaxed">Laporan pengguna terkait aktivitas mencurigakan.</p>
-      </div>
-
-      <!-- Card 3 -->
-      <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col">
-        <div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center mb-4">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" /></svg>
-        </div>
-        <div class="text-3xl font-bold text-gray-900 mb-2">3</div>
-        <p class="text-gray-500 text-sm leading-relaxed">Kasus transaksi tertunda atau klaim pengembalian dana pembeli.</p>
-      </div>
-    </div>
-
-    <!-- My Gigs Section -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 mb-10 ml-12">
-      <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-xl">
-        <h2 class="text-lg font-bold text-gray-900">My Gigs</h2>
-        <router-link to="/vendor/catalog/add" class="px-5 py-2 text-sm font-medium rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 transition-colors">Add New</router-link>
-      </div>
-      
-      <div class="">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-white border-b border-gray-100">
-              <th class="py-4 px-6 text-xs font-bold text-gray-500 uppercase">Judul</th>
-              <th class="py-4 px-6 text-xs font-bold text-gray-500 uppercase">Deskripsi</th>
-              <th class="py-4 px-6 text-xs font-bold text-gray-500 uppercase">Harga Paket</th>
-              <th class="py-4 px-6 text-xs font-bold text-gray-500 uppercase">Media Sampul</th>
-              <th class="py-4 px-6 text-xs font-bold text-gray-500 uppercase text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="gig in gigs" :key="gig.id" class="hover:bg-gray-50 transition-colors bg-white group">
-              <td class="py-5 px-6 relative">
-                <div v-if="gig.isPromoted" class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full flex flex-col items-end">
-                  <div class="w-12 h-12 bg-[#F1B44C] rounded-tl-lg flex items-center justify-center text-white shadow-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7">
-                      <path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-                    </svg>
-                  </div>
-                  <div class="w-12 h-1.5 bg-gray-100 rounded-bl-lg overflow-hidden border-t border-white/10">
-                    <div class="h-full bg-[#5FC48C] countdown-animate"></div>
-                  </div>
-                </div>
-                <span class="font-bold text-sm text-gray-900">{{ gig.title }}</span>
-              </td>
-              <td class="py-5 px-6">
-                <span class="text-sm font-bold text-gray-500">{{ gig.description }}</span>
-              </td>
-              <td class="py-5 px-6">
-                <div class="flex items-center gap-1.5">
-                  <div v-if="gig.packages.includes('basic')" class="w-8 h-8 rounded-lg bg-gray-500 text-white flex items-center justify-center">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" /><path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
-                  </div>
-                  <div v-if="gig.packages.includes('standard')" class="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" /><path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
-                  </div>
-                  <div v-if="gig.packages.includes('premium')" class="w-8 h-8 rounded-lg bg-brand-blue text-white flex items-center justify-center">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" /><path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
-                  </div>
-                </div>
-              </td>
-              <td class="py-5 px-6">
-                <div class="flex items-center gap-2 relative">
-                  <div 
-                    v-for="(item, idx) in gig.media" 
-                    :key="idx" 
-                    class="flex items-center gap-2 bg-brand-navy text-white text-xs px-3 py-1.5 rounded-lg shrink-0 z-10"
-                    :class="idx > 0 ? '-ml-8 opacity-50 relative' : 'relative z-20'"
-                  >
-                    <svg v-if="item.type === 'image'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <span v-if="idx === 0" class="max-w-[80px] truncate">{{ item.name }}</span>
-                    <span v-else class="max-w-[40px] truncate">...</span>
-                  </div>
-                </div>
-              </td>
-              <td class="py-5 px-6 text-center">
-                <router-link :to="`/vendor/catalog/edit/${gig.id}`" class="bg-orange-400 hover:bg-orange-500 text-white text-xs font-bold px-4 py-1.5 rounded inline-block">
-                  Edit
-                </router-link>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <!-- Pagination -->
-      <div class="p-4 border-t border-gray-100 flex items-center justify-between bg-white">
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-          Previous
-        </button>
-        
-        <div class="flex items-center gap-2">
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 text-gray-900 font-bold text-sm">1</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 font-bold text-sm hover:bg-gray-50">2</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 font-bold text-sm hover:bg-gray-50">3</button>
-          <span class="w-8 h-8 flex items-center justify-center text-gray-500 font-bold text-sm">...</span>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 font-bold text-sm hover:bg-gray-50">8</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 font-bold text-sm hover:bg-gray-50">9</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 font-bold text-sm hover:bg-gray-50">10</button>
-        </div>
-        
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-          Next
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        </button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.countdown-animate {
-  background-image: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.4) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  background-size: 200% 100%;
-  animation: 
-    shimmer 2s infinite linear,
-    countdown 15s infinite linear;
+.catalog-page {
+  padding: 8px 4px 48px;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+.page-title {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: #1e293b;
+  margin-bottom: 32px;
 }
 
-@keyframes countdown {
-  0% { width: 100%; }
-  100% { width: 0%; }
+/* Tabs Row */
+.tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.tab-btn {
+  padding: 10px 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: #1e293b;
+}
+
+.tab-btn.active {
+  color: #1e293b;
+  font-weight: 600;
+  border-bottom-color: #3b82f6;
+}
+
+.btn-create {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-create:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+/* Cards Grid */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+/* Gig Card */
+.gig-card {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+  transition: box-shadow 0.25s ease, transform 0.2s ease;
+}
+
+.gig-card:hover {
+  box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+}
+
+/* Thumbnail */
+.gig-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #1a1a2e;
+  overflow: hidden;
+}
+
+.thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+/* Status Badge */
+.status-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.badge-active {
+  background: #059669;
+  color: white;
+}
+
+.badge-pending {
+  background: #3b82f6;
+  color: white;
+}
+
+.badge-rejected {
+  background: #ef4444;
+  color: white;
+}
+
+.badge-draft {
+  background: #6b7280;
+  color: white;
+}
+
+.badge-restricted {
+  background: #374151;
+  color: white;
+}
+
+/* Gig Info */
+.gig-info {
+  padding: 16px 20px 20px;
+}
+
+.gig-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.gig-desc {
+  font-size: 0.8rem;
+  color: #6b7280;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gig-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gig-price {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #1e3a8a;
+}
+
+.edit-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+/* Promotion */
+.promo-disabled {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #9ca3af;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.boost-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: #059669;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.boost-btn:hover {
+  background: #047857;
+}
+
+/* Pending */
+.pending-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 14px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.pending-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Rejected */
+.rejected-actions {
+  margin-top: 10px;
+}
+
+.note-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.note-btn:hover {
+  color: #dc2626;
+}
+
+.rejection-note {
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  border-radius: 0 8px 8px 0;
+  font-size: 0.78rem;
+  color: #b91c1c;
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.note-fade-enter-active { transition: all 0.25s ease; }
+.note-fade-leave-active { transition: all 0.2s ease; }
+.note-fade-enter-from, .note-fade-leave-to { opacity: 0; transform: translateY(-4px); }
+
+/* Draft Actions */
+.draft-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.btn-continue {
+  flex: 1;
+  padding: 10px 20px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.btn-continue:hover {
+  background: #2563eb;
+}
+
+.btn-delete {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 2px solid #fecaca;
+  background: white;
+  color: #ef4444;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-delete:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+/* Add Card */
+.add-card {
+  border: 2px dashed #d1d5db;
+  background: #fafafa;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 340px;
+  transition: all 0.25s ease;
+}
+
+.add-card:hover {
+  border-color: #3b82f6;
+  background: #f0f7ff;
+}
+
+.add-card-inner {
+  text-align: center;
+  padding: 32px;
+}
+
+.add-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #e5e7eb;
+  color: #9ca3af;
+  transition: all 0.2s ease;
+}
+
+.add-card:hover .add-icon {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: #eff6ff;
+}
+
+.add-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.add-desc {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  line-height: 1.5;
+  max-width: 220px;
+  margin: 0 auto 12px;
+}
+
+.add-link {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ef4444;
+  transition: color 0.2s;
+}
+
+.add-card:hover .add-link {
+  color: #dc2626;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .tabs-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gig-card, .btn-create, .boost-btn, .pending-dot, .tab-btn {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 </style>

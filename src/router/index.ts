@@ -387,14 +387,9 @@ const routes = [
         component: () => import('../views/vendor/EditGigView.vue'),
       },
       {
-        path: 'catalog/promote/:id',
-        name: 'VendorCatalogPromote',
-        component: () => import('../views/vendor/PromoteGigView.vue'),
-      },
-      {
-        path: 'catalog/promote/:id/payment',
-        name: 'VendorCatalogPromotePayment',
-        component: () => import('../views/vendor/PromoteGigPaymentView.vue'),
+        path: 'catalog/edit/:id/form',
+        name: 'VendorCatalogEditForm',
+        component: () => import('../views/vendor/EditGigFormView.vue'),
       },
     ],
   },
