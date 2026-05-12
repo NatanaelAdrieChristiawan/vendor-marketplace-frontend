@@ -230,6 +230,16 @@ const routes = [
         component: () => import('../views/finance-admin/ReportsView.vue'),
       },
       {
+        path: 'merchant-recap',
+        name: 'MerchantRecap',
+        component: () => import('../views/finance-admin/MerchantRecapView.vue'),
+      },
+      {
+        path: 'merchant-recap/:id',
+        name: 'MerchantRecapDetail',
+        component: () => import('../views/finance-admin/MerchantRecapDetailView.vue'),
+      },
+      {
         path: 'profile',
         name: 'FinanceProfile',
         component: () => import('../views/finance-admin/ProfileView.vue'),
