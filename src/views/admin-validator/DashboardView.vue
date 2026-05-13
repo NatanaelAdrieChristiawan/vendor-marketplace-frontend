@@ -1,36 +1,48 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAdmin } from '../../composables/useAdmin'
 
-const stats = [
+const router = useRouter()
+const { pendingMerchantsQuery, pendingDisputesQuery } = useAdmin()
+
+const stats = computed(() => [
   {
     title: 'Vendor baru yang membutuhkan validasi',
-    value: '12',
+    value: pendingMerchantsQuery.data.value?.length || 0,
     icon: 'store',
     iconColor: 'text-blue-500',
     iconBg: 'bg-blue-50',
   },
   {
     title: 'Laporan pengguna terkait aktivitas mencurigakan.',
-    value: '5',
+    value: '0',
     icon: 'flag',
     iconColor: 'text-red-500',
     iconBg: 'bg-red-50',
   },
   {
     title: 'Kasus transaksi tertunda atau klaim pengembalian dana pembeli.',
-    value: '3',
+    value: pendingDisputesQuery.data.value?.length || 0,
     icon: 'scale',
     iconColor: 'text-orange-500',
     iconBg: 'bg-orange-50',
   },
-]
-
-const pendingReviews = ref([
-  { id: 1, name: 'User A', type: 'Creative Studio', email: 'creativs@untitledui.com' },
-  { id: 2, name: 'User B', type: 'Event Essentials', email: 'creativs@untitledui.com' },
-  { id: 3, name: 'User C', type: 'Tech & Digital', email: 'creativs@untitledui.com' },
-  { id: 4, name: 'User D', type: 'Merch Apparel', email: 'creativs@untitledui.com' },
 ])
+
+const pendingReviews = computed(() => {
+  const merchants = pendingMerchantsQuery.data.value || []
+  return merchants.slice(0, 5).map((m: any) => ({
+    id: m.id,
+    name: m.shopName,
+    type: 'Creative Services',
+    email: m.user?.email || 'N/A'
+  }))
+})
+
+function goToVerification(id: number) {
+  router.push(`/admin-validator/vendor-verification/${id}`)
+}
 </script>
 
 <template>
@@ -44,7 +56,6 @@ const pendingReviews = ref([
       <div v-for="(stat, index) in stats" :key="index" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition-shadow">
         <div class="flex items-start justify-between mb-4">
           <div :class="['w-12 h-12 rounded-xl flex items-center justify-center', stat.iconBg, stat.iconColor]">
-            <!-- Icons -->
             <svg v-if="stat.icon === 'store'" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
@@ -67,7 +78,7 @@ const pendingReviews = ref([
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div class="p-6 border-b border-gray-100 flex items-center justify-between">
         <h2 class="text-lg font-bold text-gray-800">Antrian Peninjauan Segera</h2>
-        <button class="text-gray-400 hover:text-gray-600 transition-colors">
+        <button @click="router.push('/admin-validator/vendor-verification')" class="text-gray-400 hover:text-gray-600 transition-colors">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
         </button>
       </div>
@@ -76,48 +87,29 @@ const pendingReviews = ref([
           <thead class="text-xs text-gray-400 bg-gray-50/50 uppercase border-b border-gray-100">
             <tr>
               <th scope="col" class="px-6 py-4 font-semibold tracking-wider">Nama Vendor</th>
-              <th scope="col" class="px-6 py-4 font-semibold tracking-wider flex items-center gap-1">
-                Tipe
-                <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </th>
+              <th scope="col" class="px-6 py-4 font-semibold tracking-wider">Tipe</th>
               <th scope="col" class="px-6 py-4 font-semibold tracking-wider">Email</th>
               <th scope="col" class="px-6 py-4 font-semibold tracking-wider text-right">Aksi</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100">
+          <tbody v-if="pendingReviews.length > 0" class="divide-y divide-gray-100">
             <tr v-for="user in pendingReviews" :key="user.id" class="hover:bg-gray-50/50 transition-colors">
               <td class="px-6 py-4 font-semibold text-gray-800">{{ user.name }}</td>
               <td class="px-6 py-4 font-medium text-gray-600">{{ user.type }}</td>
               <td class="px-6 py-4 text-gray-500">{{ user.email }}</td>
               <td class="px-6 py-4 text-right">
-                <button class="bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-sm">
+                <button @click="goToVerification(user.id)" class="bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-sm">
                   Lihat
                 </button>
               </td>
             </tr>
           </tbody>
+          <tbody v-else>
+            <tr>
+              <td colspan="4" class="px-6 py-10 text-center text-gray-400 italic">Tidak ada antrean tertunda</td>
+            </tr>
+          </tbody>
         </table>
-      </div>
-      
-      <!-- Pagination -->
-      <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-          Previous
-        </button>
-        <div class="hidden sm:flex items-center gap-1">
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-800 font-medium text-sm">1</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">2</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">3</button>
-          <span class="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">8</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">9</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">10</button>
-        </div>
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-          Next
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        </button>
       </div>
     </div>
   </div>

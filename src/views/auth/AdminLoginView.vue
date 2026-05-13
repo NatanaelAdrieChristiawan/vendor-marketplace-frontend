@@ -11,23 +11,10 @@ const loginError = ref(false)
 
 function handleLogin() {
   loginError.value = false
-  let role = ''
-
-  if (email.value === 'super' && password.value === 'super123') {
-    role = 'SUPER_ADMIN'
-  } else if (email.value === 'finance' && password.value === 'finance123') {
-    role = 'FINANCE_ADMIN'
-  } else if (email.value === 'validator' && password.value === 'validator123') {
-    role = 'ADMIN_VALIDATOR'
-  } else {
-    loginError.value = true
-    return
-  }
-
+  
   loginMutation.mutate({
     email: email.value,
     password: password.value,
-    role: role,
   })
 }
 </script>

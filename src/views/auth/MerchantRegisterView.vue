@@ -2,9 +2,11 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth'
+import { useRegistrationStore } from '../../store/registration.store'
 
 const router = useRouter()
-const { registerVendorMutation } = useAuth()
+const { registerMerchantMutation } = useAuth()
+const registrationStore = useRegistrationStore()
 
 const currentStep = ref(1) // 1=profile, 2=kyb
 
@@ -48,8 +50,40 @@ function nextStep() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function handleSubmit() {
-  registerVendorMutation.mutate({ storeName: form.storeName })
+async function handleSubmit() {
+  if (!form.storeName || !form.description) return
+
+  // Convert files to Data URLs for the single trigger
+  const logoUrl = form.logoFile ? await fileToDataUrl(form.logoFile) : ''
+  const bannerUrl = form.bannerFile ? await fileToDataUrl(form.bannerFile) : ''
+  // KYB file handling depends on backend, for now we can just send the name or skip if not handled in the unified DTO
+  // The unified DTO RegisterMerchantUserDto usually doesn't have KYB yet, but we'll include it if possible
+
+  registerMerchantMutation.mutate({
+    email: registrationStore.email,
+    password: registrationStore.password,
+    fullName: registrationStore.username,
+    shopName: form.storeName,
+    description: form.description,
+    logoUrl: logoUrl || 'https://placehold.co/200x200?text=Logo',
+    bannerUrl: bannerUrl || 'https://placehold.co/1200x400?text=Banner',
+    bankName: form.bankName,
+    accountNumber: form.bankAccount,
+    accountHolderName: form.bankHolder
+  }, {
+    onSuccess: () => {
+      registrationStore.reset()
+      router.push('/vendor/dashboard')
+    }
+  })
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target?.result as string)
+    reader.readAsDataURL(file)
+  })
 }
 </script>
 
@@ -183,11 +217,16 @@ function handleSubmit() {
         <input v-model="form.portfolioLink" class="mr-input" placeholder="https://behance.net/username" />
       </section>
 
-      <button class="mr-btn" :disabled="registerVendorMutation.isPending.value" @click="handleSubmit">
-        <svg v-if="registerVendorMutation.isPending.value" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
-        {{ registerVendorMutation.isPending.value ? 'Memproses...' : 'Submit for Review' }}
-        <svg v-if="!registerVendorMutation.isPending.value" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <button class="mr-btn" :disabled="registerMerchantMutation.isPending.value" @click="handleSubmit">
+        <svg v-if="registerMerchantMutation.isPending.value" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
+        {{ registerMerchantMutation.isPending.value ? 'Memproses...' : 'Submit for Review' }}
+        <svg v-if="!registerMerchantMutation.isPending.value" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </button>
+      
+      <p v-if="registerMerchantMutation.isError.value" class="mr-error">
+        {{ (registerMerchantMutation.error.value as any)?.response?.data?.message || 'Terjadi kesalahan saat mendaftar.' }}
+      </p>
+
       <p class="mr-terms">Dengan mengklik "Submit for Review", Anda menyetujui <a href="#">Syarat & Ketentuan Vendor</a> serta kebijakan privasi VendorFlow.</p>
     </div>
   </div>
@@ -260,6 +299,8 @@ function handleSubmit() {
 .mr-terms { text-align:center; font-size:.73rem; color:#6B7280; margin-top:.75rem; line-height:1.5; }
 .mr-terms a { color:#2563EB; text-decoration:none; }
 .mr-terms a:hover { text-decoration:underline; }
+
+.mr-error { font-size:.8rem; color:#DC2626; text-align:center; margin-top:1rem; animation:fadeUp .3s ease both; }
 
 .spin { animation:spinning .8s linear infinite; }
 @keyframes spinning { to { transform:rotate(360deg); } }

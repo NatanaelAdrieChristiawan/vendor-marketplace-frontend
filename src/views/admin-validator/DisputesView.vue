@@ -1,28 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAdmin } from '../../composables/useAdmin'
 
 const router = useRouter()
+const { pendingDisputesQuery } = useAdmin()
 
-const disputes = ref([
-  {
-    id: '#DS-90422',
-    vendorName: 'Creativ Studio',
-    vendorId: '#VDR-4567',
+const disputes = computed(() => {
+  const data = pendingDisputesQuery.data.value || []
+  return data.map((d: any) => ({
+    id: d.id,
+    displayId: `#DS-${d.id.toString().padStart(5, '0')}`,
+    clientName: d.order?.client?.fullName || 'N/A',
+    gigTitle: d.order?.gig?.title || 'Pesanan Langsung',
     status: 'Menunggu'
-  },
-  {
-    id: '#DS-90423',
-    vendorName: 'Creativ Studio',
-    vendorId: '#VDR-4567',
-    status: 'Menunggu'
-  }
-])
+  }))
+})
 
-function goToDetail(id: string) {
-  // Pass the id without # character in URL
-  const cleanId = id.replace('#', '')
-  router.push(`/admin-validator/disputes/${cleanId}`)
+function goToDetail(id: number) {
+  router.push(`/admin-validator/disputes/${id}`)
 }
 </script>
 
@@ -49,7 +45,7 @@ function goToDetail(id: string) {
     </div>
 
     <!-- Cards List -->
-    <div class="space-y-4">
+    <div v-if="disputes.length > 0" class="space-y-4">
       <div 
         v-for="(dispute, index) in disputes" 
         :key="index"
@@ -57,8 +53,8 @@ function goToDetail(id: string) {
       >
         <div class="flex justify-between items-start mb-6">
           <div>
-            <h3 class="font-extrabold text-gray-900 text-[15px]">{{ dispute.vendorName }}</h3>
-            <p class="text-xs text-gray-500 font-medium mt-1">{{ dispute.vendorId }}</p>
+            <h3 class="font-extrabold text-gray-900 text-[15px]">{{ dispute.gigTitle }}</h3>
+            <p class="text-xs text-gray-500 font-medium mt-1">Klien: {{ dispute.clientName }} ({{ dispute.displayId }})</p>
           </div>
           <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-yellow-100 bg-yellow-50 text-xs font-bold text-yellow-600">
             <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
@@ -75,6 +71,9 @@ function goToDetail(id: string) {
           </button>
         </div>
       </div>
+    </div>
+    <div v-else class="p-20 text-center text-gray-400 italic bg-white rounded-2xl border border-gray-100">
+      Tidak ada sengketa aktif yang membutuhkan penanganan.
     </div>
 
   </div>

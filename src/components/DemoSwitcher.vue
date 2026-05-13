@@ -16,6 +16,7 @@ const roles = [
 const switchRole = (role: string) => {
   const fakeUser = {
     id: 'demo-' + role.toLowerCase(),
+    fullName: role === 'CLIENT' ? 'Budi' : 'Demo ' + role.replace('_', ' '),
     name: role === 'CLIENT' ? 'Budi' : 'Demo ' + role.replace('_', ' '),
     email: 'demo@example.com',
     role: role

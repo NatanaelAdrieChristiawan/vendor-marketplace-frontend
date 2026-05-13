@@ -3,8 +3,10 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import FileUpload from '../../components/ui/FileUpload.vue'
 import Button from '../../components/ui/Button.vue'
+import { useRegistrationStore } from '../../store/registration.store'
 
 const router = useRouter()
+const registrationStore = useRegistrationStore()
 const logoFile = ref<File | null>(null)
 const bannerFile = ref<File | null>(null)
 
@@ -12,9 +14,22 @@ function goBack() {
   router.push('/daftar/vendor')
 }
 
-function handleSubmit() {
-  // Navigation to the next step
+async function handleSubmit() {
+  // Convert files to Data URLs for the single trigger later
+  // In a real app, you might upload here or send FormData at the end.
+  const logoUrl = logoFile.value ? await fileToDataUrl(logoFile.value) : registrationStore.logoUrl
+  const bannerUrl = bannerFile.value ? await fileToDataUrl(bannerFile.value) : registrationStore.bannerUrl
+
+  registrationStore.setUploads({ logoUrl, bannerUrl })
   router.push('/daftar/vendor/bank')
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target?.result as string)
+    reader.readAsDataURL(file)
+  })
 }
 </script>
 
