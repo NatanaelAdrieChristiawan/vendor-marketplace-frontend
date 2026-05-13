@@ -28,7 +28,7 @@ const menuItems = computed(() => {
       icon: 'home',
     },
     {
-      name: 'Toko saya',
+      name: 'Profil Toko',
       path: '/vendor/my-store',
       icon: 'store',
     },
@@ -176,6 +176,19 @@ const isParentActive = (item: any) => {
             </router-link>
           </template>
         </nav>
+      </div>
+
+      <!-- Profile Section -->
+      <div class="sidebar-bottom">
+        <router-link to="/vendor/profile" class="profile-card" :title="isCollapsed ? 'Profil' : ''">
+          <div class="avatar-wrapper">
+            <img src="https://i.pravatar.cc/150?img=11" alt="Profil" />
+          </div>
+          <div class="profile-info" v-if="!isCollapsed">
+            <span class="profile-name">Budi Pratama</span>
+            <span class="profile-role">Vendor</span>
+          </div>
+        </router-link>
       </div>
     </aside>
 
@@ -423,6 +436,90 @@ const isParentActive = (item: any) => {
   flex-direction: column;
 }
 
+/* --- Profile Section --- */
+.sidebar-bottom {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  padding: 10px;
+  border-radius: 16px;
+  width: 100%;
+  text-decoration: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.profile-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.sidebar.collapsed .profile-card {
+  padding: 8px;
+  justify-content: center;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sidebar.collapsed .profile-card:hover {
+  background: rgba(0,0,0,0.05);
+  transform: none;
+}
+
+.avatar-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f1f5f9;
+}
+
+.sidebar.collapsed .avatar-wrapper {
+  width: 32px;
+  height: 32px;
+}
+
+.avatar-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.profile-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e293b;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.profile-role {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
 /* --- Main Content --- */
 .main-content {
   flex: 1;
@@ -482,6 +579,10 @@ const isParentActive = (item: any) => {
   }
 
   .chevron {
+    display: none;
+  }
+
+  .sidebar-bottom {
     display: none;
   }
 
