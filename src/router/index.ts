@@ -317,6 +317,11 @@ const routes = [
         component: MyStoreView,
       },
       {
+        path: 'profile',
+        name: 'VendorProfile',
+        component: () => import('../views/vendor/ProfileView.vue'),
+      },
+      {
         path: 'associate/dashboard',
         name: 'VendorAssociateDashboard',
         component: () => import('../views/vendor/AssociateDashboardView.vue'),
