@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../store/auth.store'
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 const profile = ref({
   name: 'Budi Pratama',
@@ -18,6 +23,11 @@ const saveProfile = () => {
   isEditing.value = false
   // Call API to save changes
 }
+
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/masuk')
+}
 </script>
 
 <template>
@@ -25,9 +35,17 @@ const saveProfile = () => {
     <div class="max-w-3xl mx-auto">
       <div class="flex items-center justify-between mb-8">
         <h1 class="text-2xl font-bold text-gray-900">Profil Saya</h1>
-        <button v-if="!isEditing" @click="toggleEdit" class="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-semibold hover:bg-blue-100 transition-colors">
-          Edit Profil
-        </button>
+        <div class="flex items-center gap-3">
+          <button v-if="!isEditing" @click="toggleEdit" class="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-semibold hover:bg-blue-100 transition-colors shadow-sm">
+            Edit Profil
+          </button>
+          <button @click="handleLogout" class="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl font-semibold hover:bg-red-100 transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Logout
+          </button>
+        </div>
       </div>
 
       <div class="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
