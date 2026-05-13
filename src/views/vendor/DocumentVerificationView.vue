@@ -29,9 +29,9 @@ const validatorNote = ref('')
 function setDemo(s: 'PENDING_VERIFICATION' | 'REJECTED' | 'ACTIVE') {
   status.value = s
   if (s === 'REJECTED') {
-    documents.value[0].status = 'ACTIVE'
-    documents.value[1].status = 'PENDING_VERIFICATION'
-    documents.value[2].status = 'ACTIVE'
+    documents.value[0]!.status = 'ACTIVE'
+    documents.value[1]!.status = 'PENDING_VERIFICATION'
+    documents.value[2]!.status = 'ACTIVE'
     validatorNote.value = '"Terima kasih telah bergabung dengan VendorFlow. Kami membutuhkan verifikasi tambahan pada dokumen SK Organisasi Anda karena resolusi gambar terlalu rendah. Bagian tanda tangan dan cap basah harus terlihat jelas agar kami dapat memvalidasi keaslian dokumen."'
   } else if (s === 'ACTIVE') {
     documents.value.forEach(d => d.status = 'ACTIVE')

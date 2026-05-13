@@ -1,7 +1,13 @@
+<script setup lang="ts">
+defineProps<{
+  showCta?: boolean
+}>()
+</script>
+
 <template>
   <footer class="footer">
     <!-- CTA Section -->
-    <section class="footer__cta">
+    <section v-if="showCta !== false" class="footer__cta">
       <h2 class="footer__cta-title">Apakah Anda Seorang Profesional?</h2>
       <p class="footer__cta-desc">
         Bergabunglah dengan komunitas LayananPro dan mulailah

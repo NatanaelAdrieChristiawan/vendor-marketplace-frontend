@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const activeTab = ref('Semua')
 const tabs = ['Semua', 'Menunggu', 'Disetujui', 'Ditolak', 'Draf']
@@ -67,6 +70,10 @@ const filteredGigs = computed(() => {
   if (activeTab.value === 'Semua') return gigs.value.filter(g => !g.isDraft)
   return gigs.value.filter(g => g.category === activeTab.value)
 })
+
+function navigateToDetail(id: number) {
+  router.push({ name: 'VendorAssociateCatalogDetail', params: { id } })
+}
 </script>
 
 <template>
@@ -102,7 +109,8 @@ const filteredGigs = computed(() => {
       <div 
         v-for="gig in filteredGigs" 
         :key="gig.id"
-        class="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-all group"
+        @click="navigateToDetail(gig.id)"
+        class="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-all group cursor-pointer"
       >
         <div class="relative h-56 bg-gray-200">
           <img :src="gig.image" class="w-full h-full object-cover grayscale brightness-50" />
@@ -121,7 +129,7 @@ const filteredGigs = computed(() => {
                 {{ gig.description }}
               </p>
             </div>
-            <button class="p-2 hover:bg-gray-50 rounded-lg transition-colors">
+            <button @click.stop class="p-2 hover:bg-gray-50 rounded-lg transition-colors">
               <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
             </button>
           </div>
@@ -133,10 +141,10 @@ const filteredGigs = computed(() => {
           <div class="pt-4 border-t border-gray-50">
             <!-- Draft Actions -->
             <div v-if="gig.isDraft" class="flex items-center gap-3">
-              <button class="flex-1 bg-[#2F4DC4] text-white py-3 rounded-2xl text-xs font-bold hover:bg-[#1E3A8A] transition-all shadow-md">
+              <button @click.stop class="flex-1 bg-[#2F4DC4] text-white py-3 rounded-2xl text-xs font-bold hover:bg-[#1E3A8A] transition-all shadow-md">
                 Lanjutkan edit
               </button>
-              <button class="w-12 h-12 flex items-center justify-center border border-red-100 text-red-500 rounded-2xl hover:bg-red-50 transition-all">
+              <button @click.stop class="w-12 h-12 flex items-center justify-center border border-red-100 text-red-500 rounded-2xl hover:bg-red-50 transition-all">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               </button>
             </div>
@@ -147,14 +155,14 @@ const filteredGigs = computed(() => {
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 <span class="text-[8px] font-bold uppercase tracking-widest">Promosi Dinonaktifkan</span>
               </div>
-              <button disabled class="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-not-allowed">
+              <button @click.stop disabled class="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-not-allowed">
                 Boost Gig
               </button>
             </div>
 
             <!-- Active / Boost -->
             <div v-else-if="gig.hasBoost" class="flex justify-end">
-              <button class="bg-[#1E3A8A] text-white px-6 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-[#1E3A8A]/90 transition-all">
+              <button @click.stop class="bg-[#1E3A8A] text-white px-6 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-[#1E3A8A]/90 transition-all">
                 Boost Gig
               </button>
             </div>
@@ -167,7 +175,7 @@ const filteredGigs = computed(() => {
 
             <!-- Rejected with Note -->
             <div v-else-if="gig.hasNote" class="space-y-3">
-              <button class="text-[10px] font-bold text-red-500 flex items-center gap-2 hover:opacity-80">
+              <button @click.stop class="text-[10px] font-bold text-red-500 flex items-center gap-2 hover:opacity-80">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
                 LIHAT CATATAN
               </button>
