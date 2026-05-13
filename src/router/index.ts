@@ -327,6 +327,11 @@ const routes = [
         component: () => import('../views/vendor/AssociateCatalogView.vue'),
       },
       {
+        path: 'associate/catalog/:id',
+        name: 'VendorAssociateCatalogDetail',
+        component: () => import('../views/vendor/AssociateCatalogDetailView.vue'),
+      },
+      {
         path: 'associate/messages',
         name: 'VendorAssociateMessages',
         component: () => import('../views/vendor/AssociateMessagesView.vue'),
