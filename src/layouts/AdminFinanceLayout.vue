@@ -66,19 +66,15 @@ function isPaymentActive() {
 
 <template>
   <div class="min-h-screen bg-[#F9F7F7] flex p-6 gap-6 font-sans text-gray-800">
-    <!-- Sidebar Container -->
     <aside
       :class="[
         'sticky top-6 self-start transition-all duration-300 z-40 flex flex-col',
         sidebarCollapsed ? 'w-[72px]' : 'w-64',
       ]"
     >
-      <!-- Main Float Menu -->
       <div class="bg-[#1E3A8A] text-white rounded-[32px] flex flex-col shadow-lg py-6 overflow-hidden">
         <nav class="space-y-1 px-3 w-full">
           <template v-for="item in menuItems" :key="item.name">
-
-            <!-- Menu with submenu (Pembayaran) -->
             <template v-if="item.hasSubmenu">
               <button
                 @click="togglePaymentSubmenu"
@@ -112,7 +108,6 @@ function isPaymentActive() {
                 </svg>
               </button>
 
-              <!-- Submenu items -->
               <Transition name="submenu">
                 <div v-if="paymentSubmenuOpen && !sidebarCollapsed" class="ml-5 pl-4 border-l border-white/20 space-y-1 mt-1">
                   <router-link
@@ -135,7 +130,6 @@ function isPaymentActive() {
               </Transition>
             </template>
 
-            <!-- Regular menu item -->
             <template v-else>
               <router-link
                 :to="item.path!"
@@ -165,7 +159,6 @@ function isPaymentActive() {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 3h18l-2 13H5L3 3zm0 0l-1-1m4 15a2 2 0 100 4 2 2 0 000-4zm10 0a2 2 0 100 4 2 2 0 000-4zM5 6h14" />
                   </svg>
                 </div>
-
                 <div
                   class="w-full text-body-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 flex-1"
                   :class="sidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'"
@@ -177,10 +170,7 @@ function isPaymentActive() {
           </template>
         </nav>
       </div>
-
-      <!-- Settings and Avatar outside the blue box -->
       <div class="mt-8 flex flex-col gap-6 w-full items-center">
-        <!-- Profile Link -->
         <router-link
           to="/finance-admin/profile"
           class="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center shadow-md bg-white border border-gray-100 hover:shadow-lg transition-shadow"
@@ -190,7 +180,6 @@ function isPaymentActive() {
           <img src="https://i.pravatar.cc/150?img=8" alt="User Profile" class="w-8 h-8 rounded-full object-cover" v-if="!sidebarCollapsed" />
           <span v-if="!sidebarCollapsed" class="font-semibold text-sm text-gray-800">Admin Finance</span>
         </router-link>
-
         <button class="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-800 transition-colors" @click="toggleSidebar">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -199,8 +188,6 @@ function isPaymentActive() {
         </button>
       </div>
     </aside>
-
-    <!-- Main Content Area -->
     <div class="flex-1 w-full max-w-[1240px] mx-auto">
       <router-view />
     </div>

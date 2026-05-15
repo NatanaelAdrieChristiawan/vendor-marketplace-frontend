@@ -16,7 +16,6 @@ const form = reactive({
   confirmPassword: '',
   username: '',
   role: '' as '' | 'CLIENT' | 'MERCHANT',
-  // Merchant specific
   shopName: '',
   description: '',
   logoUrl: '',
@@ -29,6 +28,7 @@ const form = reactive({
 const showPw = ref(false)
 const showConfirmPw = ref(false)
 const pwError = ref('')
+const regError = ref('')
 
 const isProcessing = computed(() => signUpMutation.isPending.value)
 
@@ -74,8 +74,6 @@ function selectRole(r: 'CLIENT' | 'MERCHANT') {
 function handleFile(type: 'logo' | 'banner', e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0]
   if (!f) return
-  // NOTE: Backend expects URL. For this demo/task, we'll use a placeholder or data URL
-  // In a real app, this would upload to S3/Cloudinary first.
   const reader = new FileReader()
   reader.onload = (ev) => {
     if (type === 'logo') form.logoUrl = ev.target?.result as string
@@ -86,6 +84,7 @@ function handleFile(type: 'logo' | 'banner', e: Event) {
 
 function handleFinish() {
   if (!form.role) return
+  regError.value = ''
   
   if (form.role === 'MERCHANT') {
     registrationStore.setCredentials({
@@ -101,6 +100,10 @@ function handleFinish() {
       password: form.password,
       username: form.username,
       role: form.role,
+    }, {
+      onError: (err: any) => {
+        regError.value = err.response?.data?.message || 'Terjadi kesalahan saat mendaftar. Silakan coba lagi.'
+      }
     })
   }
 }
@@ -225,7 +228,7 @@ function handleFinish() {
         </div>
 
         <h1 class="auth-heading" style="font-size:1.375rem; margin-bottom:.5rem;">
-          Akun Anda berhasil dibuat! Apa tujuan Anda menggunakan
+          Satu langkah lagi! Apa tujuan Anda menggunakan
         </h1>
 
         <div class="role-grid">
@@ -258,6 +261,8 @@ function handleFinish() {
           </button>
         </div>
 
+        <p v-if="regError" class="auth-error" style="margin-top: 1rem;">{{ regError }}</p>
+
         <button
           id="reg-finish"
           type="button"
@@ -267,7 +272,7 @@ function handleFinish() {
           style="margin-top: 1.5rem;"
         >
           <svg v-if="isProcessing" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
-          <span>{{ isProcessing ? 'Memproses...' : 'Lanjut' }}</span>
+          <span>{{ isProcessing ? 'Memproses...' : 'Selesaikan Pendaftaran' }}</span>
           <svg v-if="!isProcessing" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
       </div>

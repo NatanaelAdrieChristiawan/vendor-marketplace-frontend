@@ -1,18 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../store/auth.store'
 
-// Layouts
 import ClientLayout from '../layouts/ClientLayout.vue'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import SuperAdminLayout from '../layouts/SuperAdminLayout.vue'
 import AdminFinanceLayout from '../layouts/AdminFinanceLayout.vue'
 import AdminValidatorLayout from '../layouts/AdminValidatorLayout.vue'
 
-// Views - Auth
 import AdminLoginView from '../views/auth/AdminLoginView.vue'
 import RegisterView from '../views/auth/RegisterView.vue'
 import MerchantRegisterView from '../views/auth/MerchantRegisterView.vue'
 
-// Views - Client
 import HomeView from '../views/client/HomeView.vue'
 import UserLoginView from '../views/auth/UserLoginView.vue'
 import VendorRegisterView from '../views/auth/VendorRegisterView.vue'
@@ -20,16 +18,13 @@ import VendorRegisterUploadView from '../views/auth/VendorRegisterUploadView.vue
 import VendorRegisterBankView from '../views/auth/VendorRegisterBankView.vue'
 import VendorRegisterSuccessView from '../views/auth/VendorRegisterSuccessView.vue'
 
-// Views - Super Admin
 import DashboardView from '../views/super-admin/DashboardView.vue'
 import SystemConfigView from '../views/super-admin/SystemConfigView.vue'
 import UserManagementView from '../views/super-admin/UserManagementView.vue'
 import ProfileView from '../views/super-admin/ProfileView.vue'
 
-// Views - Finance Admin
 import FinanceDashboardView from '../views/finance-admin/DashboardView.vue'
 
-// Vendor Layout & Views
 import VendorLayout from '../layouts/VendorLayout.vue'
 import VendorDashboardView from '../views/vendor/DashboardView.vue'
 import DocumentVerificationView from '../views/vendor/DocumentVerificationView.vue'
@@ -38,9 +33,6 @@ import AddGigView from '../views/vendor/AddGigView.vue'
 import MyStoreView from '../views/vendor/MyStoreView.vue'
 
 const routes = [
-  // ========================================
-  // CLIENT ROUTES (Default — public facing)
-  // ========================================
   {
     path: '/',
     component: ClientLayout,
@@ -97,10 +89,6 @@ const routes = [
       },
     ],
   },
-
-  // ========================================
-  // CLIENT AUTH (Role Selection & Login)
-  // ========================================
   {
     path: '/daftar',
     name: 'Register',
@@ -112,7 +100,6 @@ const routes = [
     component: UserLoginView,
     alias: '/masuk/user',
   },
-  // Legacy vendor register sub-routes (kept for backward compat)
   {
     path: '/daftar/merchant',
     name: 'MerchantRegister',
@@ -138,10 +125,6 @@ const routes = [
     name: 'VendorRegisterSuccess',
     component: VendorRegisterSuccessView,
   },
-
-  // ========================================
-  // ADMIN AUTH
-  // ========================================
   {
     path: '/admin',
     component: AuthLayout,
@@ -154,14 +137,11 @@ const routes = [
       },
     ],
   },
-
-  // ========================================
-  // SUPER ADMIN
-  // ========================================
   {
     path: '/super-admin',
     component: SuperAdminLayout,
     redirect: '/super-admin/dashboard',
+    meta: { requiresAuth: true, role: ['SUPER_ADMIN'] },
     children: [
       {
         path: 'dashboard',
@@ -190,14 +170,11 @@ const routes = [
       },
     ],
   },
-
-  // ========================================
-  // FINANCE ADMIN
-  // ========================================
   {
     path: '/finance-admin',
     component: AdminFinanceLayout,
     redirect: '/finance-admin/dashboard',
+    meta: { requiresAuth: true, role: ['ADMIN_FINANCE'] },
     children: [
       {
         path: 'dashboard',
@@ -246,14 +223,11 @@ const routes = [
       },
     ],
   },
-
-  // ========================================
-  // ADMIN VALIDATOR
-  // ========================================
   {
     path: '/admin-validator',
     component: AdminValidatorLayout,
     redirect: '/admin-validator/dashboard',
+    meta: { requiresAuth: true, role: ['ADMIN_VALIDATOR'] },
     children: [
       {
         path: 'dashboard',
@@ -297,14 +271,11 @@ const routes = [
       },
     ],
   },
-
-  // ========================================
-  // VENDOR ROUTES
-  // ========================================
   {
     path: '/vendor',
     component: VendorLayout,
     redirect: '/vendor/dashboard',
+    meta: { requiresAuth: true, role: ['MERCHANT_OWNER', 'MERCHANT_ASSOCIATE'] },
     children: [
       {
         path: 'dashboard',
@@ -427,6 +398,45 @@ const router = createRouter({
     if (savedPosition) return savedPosition
     return { top: 0 }
   },
+})
+
+router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
+  const isAuthenticated = authStore.isAuthenticated
+  const userRole = authStore.currentUser?.role
+
+  if (to.meta.requiresAuth) {
+    if (!isAuthenticated) {
+      if (to.path.startsWith('/admin') || to.path.startsWith('/super-admin') || to.path.startsWith('/finance-admin') || to.path.startsWith('/admin-validator')) {
+        next('/admin/login')
+      } else {
+        next('/masuk')
+      }
+    } else if (to.meta.role) {
+      const allowedRoles = to.meta.role as string[]
+      if (userRole && allowedRoles.includes(userRole)) {
+        next()
+      } else {
+        if (userRole === 'SUPER_ADMIN') next('/super-admin/dashboard')
+        else if (userRole === 'ADMIN_FINANCE') next('/finance-admin/dashboard')
+        else if (userRole === 'ADMIN_VALIDATOR') next('/admin-validator/dashboard')
+        else if (userRole === 'MERCHANT_OWNER' || userRole === 'MERCHANT_ASSOCIATE') next('/vendor/dashboard')
+        else next('/')
+      }
+    } else {
+      next()
+    }
+  } 
+  else if (isAuthenticated && (to.name === 'UserLogin' || to.name === 'Register' || to.name === 'AdminLogin')) {
+    if (userRole === 'SUPER_ADMIN') next('/super-admin/dashboard')
+    else if (userRole === 'ADMIN_FINANCE') next('/finance-admin/dashboard')
+    else if (userRole === 'ADMIN_VALIDATOR') next('/admin-validator/dashboard')
+    else if (userRole === 'MERCHANT_OWNER' || userRole === 'MERCHANT_ASSOCIATE') next('/vendor/dashboard')
+    else next('/')
+  }
+  else {
+    next()
+  }
 })
 
 export default router

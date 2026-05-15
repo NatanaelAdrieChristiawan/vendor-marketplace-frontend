@@ -5,7 +5,6 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const sidebarCollapsed = ref(false)
 
-
 const menuItems = [
   {
     name: 'Beranda',
@@ -38,16 +37,13 @@ function toggleSidebar() {
 
 <template>
   <div class="min-h-screen bg-[#F9F7F7] flex p-6 gap-6 font-sans text-gray-800">
-    <!-- Sidebar Container -->
     <aside
       :class="[
         'sticky top-6 self-start transition-all duration-300 z-40 flex flex-col',
         sidebarCollapsed ? 'w-[72px]' : 'w-64',
       ]"
     >
-      <!-- Main Float Menu -->
       <div class="bg-[#1E3A8A] text-white rounded-[32px] flex flex-col shadow-lg py-6 overflow-hidden">
-        <!-- Navigation -->
         <nav class="space-y-2 px-3 w-full">
           <router-link
             v-for="item in menuItems"
@@ -62,7 +58,6 @@ function toggleSidebar() {
             ]"
             :title="sidebarCollapsed ? item.name : ''"
           >
-            <!-- Icons -->
             <div class="w-6 h-6 shrink-0 flex items-center justify-center">
               <svg v-if="item.icon === 'home'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -78,7 +73,6 @@ function toggleSidebar() {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 21l3-3m0 0l3 3m-3-3v-6m5-5h3l4-4 2 2-4 4v3l-5 5m-1-1l-2-2" />
               </svg>
             </div>
-            
             <div
               class="w-full text-body-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 flex-1"
               :class="sidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'"
@@ -88,10 +82,7 @@ function toggleSidebar() {
           </router-link>
         </nav>
       </div>
-
-      <!-- Settings and Avatar outside the blue box -->
       <div class="mt-8 flex flex-col gap-6 w-full items-center">
-        <!-- Profile Link -->
         <router-link
           to="/admin-validator/profile"
           class="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center shadow-md bg-white border border-gray-100 hover:shadow-lg transition-shadow"
@@ -101,7 +92,6 @@ function toggleSidebar() {
           <img src="https://i.pravatar.cc/150?img=12" alt="User Profile" class="w-8 h-8 rounded-full object-cover" v-if="!sidebarCollapsed" />
           <span v-if="!sidebarCollapsed" class="font-semibold text-sm">Admin Validator</span>
         </router-link>
-
         <button class="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-800 transition-colors" @click="toggleSidebar">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -110,8 +100,6 @@ function toggleSidebar() {
         </button>
       </div>
     </aside>
-
-    <!-- Main Content Area -->
     <div class="flex-1 w-full max-w-[1240px] mx-auto">
       <router-view />
     </div>
