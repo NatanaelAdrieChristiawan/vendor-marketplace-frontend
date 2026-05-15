@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
+const { user: authUser, logout } = useAuth()
 
-const user = ref({
-  name: 'Admin Validator',
-  email: 'validator@example.com',
-  role: 'Admin Validator',
+const user = computed(() => ({
+  name: authUser.value?.fullName || 'Admin User',
+  email: authUser.value?.email || 'N/A',
+  role: authUser.value?.role || 'ADMIN_VALIDATOR',
   department: 'Moderation & Verification',
-})
+}))
 
 function handleLogout() {
-  // Clear any auth tokens or state here if needed
+  logout()
   router.push('/admin/login')
 }
 </script>
@@ -24,15 +26,16 @@ function handleLogout() {
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex flex-col md:flex-row gap-8 items-start">
-      <div class="w-32 h-32 rounded-full overflow-hidden shrink-0 border-4 border-gray-50">
-        <img src="https://i.pravatar.cc/150?img=12" alt="User Profile" class="w-full h-full object-cover" />
+      <div class="w-32 h-32 rounded-full overflow-hidden shrink-0 border-4 border-gray-50 bg-gray-100 flex items-center justify-center">
+        <img v-if="authUser" :src="`https://ui-avatars.com/api/?name=${user.name}&background=1E3A8A&color=fff`" alt="User Profile" class="w-full h-full object-cover" />
+        <svg v-else class="w-12 h-12 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       </div>
       
       <div class="flex-1 w-full space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-1">
             <label class="text-sm font-semibold text-gray-500">Nama Lengkap</label>
-            <p class="text-gray-900 font-medium">{{ user.name }}</p>
+            <p class="text-gray-900 font-bold text-lg">{{ user.name }}</p>
           </div>
           <div class="space-y-1">
             <label class="text-sm font-semibold text-gray-500">Alamat Email</label>
@@ -40,8 +43,10 @@ function handleLogout() {
           </div>
           <div class="space-y-1">
             <label class="text-sm font-semibold text-gray-500">Peran Sistem</label>
-            <div class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-600">
-              {{ user.role }}
+            <div>
+              <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-600 border border-blue-100 uppercase tracking-wide">
+                {{ user.role }}
+              </div>
             </div>
           </div>
           <div class="space-y-1">
@@ -50,7 +55,7 @@ function handleLogout() {
           </div>
         </div>
         
-        <div class="pt-4 border-t border-gray-100 flex flex-wrap gap-4 items-center justify-between">
+        <div class="pt-6 border-t border-gray-100 flex flex-wrap gap-4 items-center justify-between">
           <div class="flex gap-4">
             <button class="bg-[#1E3A8A] hover:bg-blue-800 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm shadow-sm">
               Edit Profil

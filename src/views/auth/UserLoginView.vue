@@ -15,7 +15,6 @@ function handleLogin() {
 
 <template>
   <div class="auth-page">
-    <!-- Left: Form -->
     <div class="auth-panel auth-panel--form">
       <div class="auth-form-box">
         <div class="auth-heading">
@@ -23,7 +22,6 @@ function handleLogin() {
         </div>
 
         <form class="auth-form" @submit.prevent="handleLogin" novalidate>
-          <!-- Email -->
           <div class="field">
             <input
               id="login-email"
@@ -36,7 +34,6 @@ function handleLogin() {
             />
           </div>
 
-          <!-- Password -->
           <div class="field">
             <div class="field__pw-wrap">
               <input
@@ -63,10 +60,8 @@ function handleLogin() {
             </div>
           </div>
 
-          <!-- Error -->
           <p v-if="loginMutation.isError.value" class="auth-error">Email atau password salah.</p>
 
-          <!-- Submit -->
           <button
             type="submit"
             id="login-submit"
@@ -85,7 +80,6 @@ function handleLogin() {
       </div>
     </div>
 
-    <!-- Right: Photo -->
     <div class="auth-panel auth-panel--photo">
       <img
         src="/images/auth-team.jpg"
@@ -107,7 +101,6 @@ function handleLogin() {
   background: #fff;
 }
 
-/* ── PANELS ── */
 .auth-panel {
   flex: 1;
   display: flex;
@@ -134,7 +127,6 @@ function handleLogin() {
   display: block;
 }
 
-/* ── FORM BOX ── */
 .auth-form-box {
   width: 100%;
   max-width: 360px;
@@ -149,7 +141,6 @@ function handleLogin() {
   margin: 0 0 2rem;
 }
 
-/* ── FORM ── */
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -221,7 +212,6 @@ function handleLogin() {
 }
 .field__forgot:hover { color: #1d4ed8; text-decoration: underline; }
 
-/* ── AUTH BTN ── */
 .auth-btn {
   display: flex;
   align-items: center;
@@ -247,7 +237,6 @@ function handleLogin() {
 }
 .auth-btn:disabled { opacity: .75; cursor: not-allowed; }
 
-/* ── ERROR ── */
 .auth-error {
   font-size: .8rem;
   color: #DC2626;
@@ -255,7 +244,6 @@ function handleLogin() {
   margin: 0;
 }
 
-/* ── SWITCH ── */
 .auth-switch {
   text-align: center;
   font-size: .8rem;
@@ -269,17 +257,14 @@ function handleLogin() {
 }
 .auth-switch__link:hover { text-decoration: underline; }
 
-/* ── SPINNER ── */
 .spin { animation: spinning .8s linear infinite; }
 @keyframes spinning { to { transform: rotate(360deg); } }
 
-/* ── ENTRANCE ── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── RESPONSIVE ── */
 @media (max-width: 768px) {
   .auth-panel--photo { display: none; }
   .auth-panel--form  { min-height: 100vh; padding: 2rem 1.5rem; }

@@ -4,13 +4,19 @@ import { useRouter } from 'vue-router'
 import Input from '../../components/ui/Input.vue'
 import Textarea from '../../components/ui/Textarea.vue'
 import Button from '../../components/ui/Button.vue'
+import { useRegistrationStore } from '../../store/registration.store'
 
 const router = useRouter()
-const storeName = ref('')
-const storeDescription = ref('')
+const registrationStore = useRegistrationStore()
+const storeName = ref(registrationStore.shopName || '')
+const storeDescription = ref(registrationStore.description || '')
 
 function handleSubmit() {
   if (storeName.value && storeDescription.value) {
+    registrationStore.setShopInfo({
+      shopName: storeName.value,
+      description: storeDescription.value
+    })
     router.push('/daftar/vendor/upload')
   }
 }

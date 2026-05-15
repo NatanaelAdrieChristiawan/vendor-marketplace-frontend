@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAdmin } from '../../composables/useAdmin'
 
 const router = useRouter()
 const route = useRoute()
+const { pendingDisputesQuery, resolveDisputeMutation } = useAdmin()
 
-const disputeId = route.params.id ? `#${route.params.id}` : '#DS-90422'
-const status = ref('Menunggu')
+const disputeId = Number(route.params.id)
+
+const dispute = computed(() => {
+  return pendingDisputesQuery.data.value?.find((d: any) => d.id === disputeId)
+})
+
+const displayId = computed(() => `#DS-${disputeId.toString().padStart(5, '0')}`)
 
 // Modal state
 const showConfirmModal = ref(false)
@@ -26,113 +33,109 @@ function closeConfirmModal() {
   confirmAction.value = null
 }
 
-function submitDecision() {
-  // Sistem Logic (SOP step 5)
-  status.value = 'WAITING_FINANCE'
+async function submitDecision() {
+  if (!confirmAction.value) return
+
+  const decision = confirmAction.value === 'approve' ? 'APPROVE_REFUND' : 'REJECT_COMPLAINT'
+  
+  await resolveDisputeMutation.mutateAsync({
+    id: disputeId,
+    decision
+  })
+  
   closeConfirmModal()
-  // Di aplikasi nyata, kirim payload ke API di sini, 
-  // lalu bisa redirect atau beri notifikasi sukses.
-  setTimeout(() => {
-    goBack()
-  }, 1000)
+  goBack()
 }
 </script>
 
 <template>
-  <div class="space-y-6 animate-fade-in w-full pb-20 max-w-[800px] mx-auto">
+  <div v-if="dispute" class="space-y-6 animate-fade-in w-full pb-20 max-w-[800px] mx-auto">
     
     <!-- Header with Back Button -->
     <div class="flex items-center gap-4">
       <button @click="goBack" class="p-2 -ml-2 rounded-xl hover:bg-gray-100 text-gray-800 transition-colors">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
       </button>
+      <h1 class="text-xl font-bold">Detail Sengketa</h1>
     </div>
 
     <!-- Title and Status Badge -->
     <div class="flex items-center gap-4">
-      <h2 class="text-3xl font-extrabold text-[#0B152A]">{{ disputeId }}</h2>
+      <h2 class="text-3xl font-extrabold text-[#0B152A]">{{ displayId }}</h2>
       <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-yellow-100 bg-yellow-50 text-xs font-bold text-yellow-600">
         <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
-        {{ status }}
-      </div>
-    </div>
-
-    <!-- Bukti Section -->
-    <div class="bg-[#F8F9FA] rounded-[20px] p-8 border border-gray-100">
-      <h3 class="font-extrabold text-[#0B152A] text-lg mb-6">Bukti</h3>
-      
-      <div class="space-y-4">
-        <!-- Bukti File 1 -->
-        <div class="bg-white rounded-xl p-4 flex items-center justify-between border border-gray-100 shadow-sm">
-          <div class="flex items-center gap-4">
-            <div class="w-12 h-12 bg-[#1E3A8A] rounded-xl flex items-center justify-center text-white shrink-0">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            </div>
-            <div>
-              <h4 class="font-bold text-gray-900 text-sm">Logo</h4>
-              <p class="text-[11px] text-gray-500 mt-0.5">File Format: PNG &nbsp;&nbsp; File Size: 2MB</p>
-            </div>
-          </div>
-          <button class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-          </button>
-        </div>
-
-        <!-- Bukti File 2 -->
-        <div class="bg-white rounded-xl p-4 flex items-center justify-between border border-gray-100 shadow-sm">
-          <div class="flex items-center gap-4">
-            <div class="w-12 h-12 bg-[#1E3A8A] rounded-xl flex items-center justify-center text-white shrink-0">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            </div>
-            <div>
-              <h4 class="font-bold text-gray-900 text-sm">Asset</h4>
-              <p class="text-[11px] text-gray-500 mt-0.5">File Format: PNG &nbsp;&nbsp; File Size: 1.5MB</p>
-            </div>
-          </div>
-          <button class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-          </button>
-        </div>
+        Menunggu Keputusan
       </div>
     </div>
 
     <!-- Ringkasan Kasus -->
     <div class="bg-white rounded-[20px] p-8 border border-gray-100 shadow-sm">
-      <h3 class="font-extrabold text-[#1E3A8A] text-lg mb-8">Ringkasan Kasus</h3>
+      <h3 class="font-extrabold text-[#1E3A8A] text-lg mb-8">Informasi Pesanan</h3>
       
       <div class="space-y-6">
         <div class="flex justify-between items-center border-b border-gray-100 pb-4">
-          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">ID TRANSAKSI</span>
-          <span class="text-sm font-medium text-gray-800">#TXN-882-1004</span>
+          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">GIG / LAYANAN</span>
+          <span class="text-sm font-bold text-gray-800">{{ dispute.order?.gig?.title || 'Pesanan Langsung' }}</span>
+        </div>
+
+        <div class="flex justify-between items-center border-b border-gray-100 pb-4">
+          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">KLIEN</span>
+          <span class="text-sm font-medium text-gray-800">{{ dispute.order?.client?.fullName }} ({{ dispute.order?.client?.email }})</span>
         </div>
         
         <div class="flex justify-between items-center border-b border-gray-100 pb-4">
           <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">TOTAL PESANAN</span>
-          <span class="text-base font-bold text-[#1E3A8A]">Rp428.050</span>
+          <span class="text-base font-bold text-[#1E3A8A]">Rp {{ Number(dispute.order?.totalAmount).toLocaleString() }}</span>
         </div>
         
-        <div class="flex justify-between items-center pb-2">
-          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">KATEGORI</span>
-          <span class="text-sm font-bold text-gray-800">Home & Decor</span>
+        <div class="pt-2">
+          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">ALASAN SENGKETA</span>
+          <p class="text-sm font-medium text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">
+            {{ dispute.reason }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bukti Section -->
+    <div v-if="dispute.evidenceUrls" class="bg-[#F8F9FA] rounded-[20px] p-8 border border-gray-100">
+      <h3 class="font-extrabold text-[#0B152A] text-lg mb-6">Bukti Pendukung</h3>
+      
+      <div class="grid grid-cols-1 gap-4">
+        <div class="bg-white rounded-xl p-4 flex items-center justify-between border border-gray-100 shadow-sm">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-[#1E3A8A] rounded-xl flex items-center justify-center text-white shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            </div>
+            <div>
+              <h4 class="font-bold text-gray-900 text-sm">File Bukti</h4>
+              <p class="text-[11px] text-gray-500 mt-0.5 truncate max-w-[200px]">{{ dispute.evidenceUrls }}</p>
+            </div>
+          </div>
+          <a :href="dispute.evidenceUrls" target="_blank" class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+          </a>
         </div>
       </div>
     </div>
 
     <!-- Bottom Actions -->
-    <div v-if="status === 'Menunggu'" class="flex flex-col items-end gap-3 pt-6">
+    <div class="flex flex-col items-end gap-3 pt-6">
       <button 
         @click="handleAction('approve')" 
-        class="bg-green-600 hover:bg-green-700 text-white font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm w-auto min-w-[280px]"
+        :disabled="resolveDisputeMutation.isPending.value"
+        class="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm w-auto min-w-[280px]"
         style="background-color: #16A34A;"
       >
-        Setujui Pengembalian Dana
+        {{ resolveDisputeMutation.isPending.value ? 'Memproses...' : 'Setujui Pengembalian Dana (Refund)' }}
       </button>
       <button 
         @click="handleAction('reject')" 
-        class="bg-red-600 hover:bg-red-700 text-white font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm w-auto min-w-[280px]"
+        :disabled="resolveDisputeMutation.isPending.value"
+        class="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm w-auto min-w-[280px]"
         style="background-color: #DC2626;"
       >
-        Tolak Keluhan
+        {{ resolveDisputeMutation.isPending.value ? 'Memproses...' : 'Tolak Keluhan (Lepaskan Dana)' }}
       </button>
     </div>
 
@@ -152,13 +155,15 @@ function submitDecision() {
           <button @click="closeConfirmModal" class="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors">
             Batal
           </button>
-          <button @click="submitDecision" class="flex-1 py-3 px-4 bg-[#1E3A8A] hover:bg-blue-800 text-white font-bold rounded-xl transition-colors">
-            Ya, Lanjutkan
+          <button @click="submitDecision" :disabled="resolveDisputeMutation.isPending.value" class="flex-1 py-3 px-4 bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 text-white font-bold rounded-xl transition-colors">
+            {{ resolveDisputeMutation.isPending.value ? 'Memproses...' : 'Ya, Lanjutkan' }}
           </button>
         </div>
       </div>
     </div>
-
+  </div>
+  <div v-else class="p-20 text-center text-gray-500 animate-fade-in">
+    Memuat data sengketa...
   </div>
 </template>
 

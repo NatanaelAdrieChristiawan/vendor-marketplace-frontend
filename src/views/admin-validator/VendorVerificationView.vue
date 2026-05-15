@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAdmin } from '../../composables/useAdmin'
 
 const router = useRouter()
+const { pendingMerchantsQuery } = useAdmin()
 
 const tabs = ['All', 'Disetujui', 'Menunggu', 'Ditolak']
-const activeTab = ref('All')
+const activeTab = ref('Menunggu')
 
-const vendors = ref([
-  { id: 'V001', name: 'Creativ Studio', status: 'Disetujui', type: '', email: 'creativs@untitledui.com' },
-  { id: 'V002', name: 'Creativ Studio', status: 'Menunggu', type: 'Event Essentials', email: 'creativs@untitledui.com' },
-  { id: 'V003', name: 'Creativ Studio', status: 'Menunggu', type: 'Tech & Digital', email: 'creativs@untitledui.com' },
-  { id: 'V004', name: 'Creativ Studio', status: 'Ditolak', type: 'Merch Apparel', email: 'creativs@untitledui.com' },
-  { id: 'V005', name: 'Creativ Studio', status: 'Menunggu', type: 'Creative Studio', email: 'creativs@untitledui.com' },
-  { id: 'V006', name: 'Creativ Studio', status: 'Disetujui', type: 'Event Essentials', email: 'creativs@untitledui.com' },
-])
+const vendors = computed(() => {
+  const data = pendingMerchantsQuery.data.value || []
+  return data.map((v: any) => ({
+    id: v.id,
+    name: v.shopName,
+    status: 'Menunggu', // Since the endpoint only returns pending ones
+    type: 'Creative Services',
+    email: v.user?.email || 'N/A'
+  }))
+})
 
-function goToDetail(id: string) {
+function goToDetail(id: number) {
   router.push(`/admin-validator/vendor-verification/${id}`)
 }
 </script>

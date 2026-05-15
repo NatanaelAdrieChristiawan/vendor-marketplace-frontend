@@ -2,51 +2,40 @@
 import { ref } from 'vue'
 import { useAuthStore } from '../store/auth.store'
 import { useRouter } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const { loginMutation } = useAuth()
 const isOpen = ref(false)
 
 const roles = [
-  { id: 'MERCHANT_OWNER', name: 'Merchant Owner', icon: '👑' },
-  { id: 'MERCHANT_ASSOCIATE', name: 'Merchant Associate', icon: '🧑‍💼' },
-  { id: 'CLIENT', name: 'Client (Buyer)', icon: '🛒' },
+  { id: 'SUPER_ADMIN', name: 'Super Admin', icon: '💎', email: 'superadmin@test.com' },
+  { id: 'ADMIN_VALIDATOR', name: 'Validator Admin', icon: '🛡️', email: 'validator@test.com' },
+  { id: 'ADMIN_FINANCE', name: 'Finance Admin', icon: '💰', email: 'finance@test.com' },
+  { id: 'MERCHANT_OWNER', name: 'Merchant Owner', icon: '👑', email: 'merchant@test.com' },
+  { id: 'MERCHANT_ASSOCIATE', name: 'Merchant Associate', icon: '🧑‍💼', email: 'associate@test.com' },
+  { id: 'CLIENT', name: 'Client (Buyer)', icon: '🛒', email: 'client@test.com' },
 ]
 
-const switchRole = (role: string) => {
-  const fakeUser = {
-    id: 'demo-' + role.toLowerCase(),
-    name: role === 'CLIENT' ? 'Budi' : 'Demo ' + role.replace('_', ' '),
-    email: 'demo@example.com',
-    role: role
-  }
-  
-  authStore.setAuth(fakeUser, 'demo_token_' + Date.now())
-  
-  // Redirect based on role
-  if (role === 'MERCHANT_OWNER') {
-    router.push('/vendor/dashboard')
-  } else if (role === 'MERCHANT_ASSOCIATE') {
-    router.push('/vendor/associate/dashboard')
-  } else {
-    // CLIENT → client pages
-    router.push('/jelajahi')
-  }
-  
+const switchRole = (email: string) => {
+  loginMutation.mutate({
+    email,
+    password: 'password123'
+  })
   isOpen.value = false
 }
 </script>
 
 <template>
   <div class="fixed bottom-6 right-6 z-[9999]">
-    <!-- Trigger Button -->
     <button 
       @click="isOpen = !isOpen"
       class="w-14 h-14 bg-[#1E3A8A] text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
       title="Demo Role Switcher"
     >
       <svg v-if="!isOpen" class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924-1.756-3.35 0a1.724 1.724 0 00-2.573 1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
       <svg v-else class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,7 +43,6 @@ const switchRole = (role: string) => {
       </svg>
     </button>
 
-    <!-- Role Menu -->
     <transition
       enter-active-class="transition duration-200 ease-out"
       enter-from-class="transform scale-95 opacity-0"
@@ -72,7 +60,7 @@ const switchRole = (role: string) => {
           <button 
             v-for="role in roles" 
             :key="role.id"
-            @click="switchRole(role.id)"
+            @click="switchRole(role.email)"
             class="w-full flex items-center gap-3 p-4 rounded-2xl hover:bg-gray-50 transition-colors text-left group"
           >
             <span class="text-2xl">{{ role.icon }}</span>
@@ -84,7 +72,7 @@ const switchRole = (role: string) => {
         </div>
         <div class="p-4 bg-gray-50 border-t border-gray-100">
           <p class="text-[10px] text-gray-400 text-center font-medium">
-            FE-Only Demo Switcher<br>Doesn't affect real database
+            Seeded Accounts Switcher<br>Uses real database data
           </p>
         </div>
       </div>

@@ -2,11 +2,13 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth'
+import { useRegistrationStore } from '../../store/registration.store'
 
 const router = useRouter()
-const { registerVendorMutation } = useAuth()
+const { registerMerchantMutation } = useAuth()
+const registrationStore = useRegistrationStore()
 
-const currentStep = ref(1) // 1=profile, 2=kyb
+const currentStep = ref(1)
 
 const form = reactive({
   storeName: '',
@@ -48,14 +50,42 @@ function nextStep() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function handleSubmit() {
-  registerVendorMutation.mutate({ storeName: form.storeName })
+async function handleSubmit() {
+  if (!form.storeName || !form.description) return
+
+  const logoUrl = form.logoFile ? await fileToDataUrl(form.logoFile) : ''
+  const bannerUrl = form.bannerFile ? await fileToDataUrl(form.bannerFile) : ''
+
+  registerMerchantMutation.mutate({
+    email: registrationStore.email,
+    password: registrationStore.password,
+    fullName: registrationStore.username,
+    shopName: form.storeName,
+    description: form.description,
+    logoUrl: logoUrl || 'https://placehold.co/200x200?text=Logo',
+    bannerUrl: bannerUrl || 'https://placehold.co/1200x400?text=Banner',
+    bankName: form.bankName,
+    accountNumber: form.bankAccount,
+    accountHolderName: form.bankHolder
+  }, {
+    onSuccess: () => {
+      registrationStore.reset()
+      router.push('/vendor/dashboard')
+    }
+  })
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target?.result as string)
+    reader.readAsDataURL(file)
+  })
 }
 </script>
 
 <template>
   <div class="mr-page">
-    <!-- Header -->
     <div class="mr-header">
       <button class="mr-back" @click="currentStep === 1 ? router.push('/daftar') : (currentStep = 1)" aria-label="Kembali">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -63,7 +93,6 @@ function handleSubmit() {
       <h1 class="mr-title">Pendaftaran Merchant</h1>
     </div>
 
-    <!-- Stepper -->
     <div class="stepper">
       <div class="stepper__item stepper__item--done">
         <div class="stepper__circle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
@@ -81,9 +110,7 @@ function handleSubmit() {
       </div>
     </div>
 
-    <!-- STEP 1: Profile + Bank -->
     <div v-if="currentStep === 1" class="mr-content" key="step1">
-      <!-- Identitas Toko -->
       <section class="mr-section">
         <div class="mr-section__head">
           <div class="mr-section__icon mr-section__icon--blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg></div>
@@ -124,7 +151,6 @@ function handleSubmit() {
         </div>
       </section>
 
-      <!-- Rekening Bank -->
       <section class="mr-section">
         <div class="mr-section__head">
           <div class="mr-section__icon mr-section__icon--green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
@@ -148,7 +174,6 @@ function handleSubmit() {
       <button class="mr-btn" @click="nextStep">Lanjut ke Verifikasi KYB <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
     </div>
 
-    <!-- STEP 2: KYB -->
     <div v-else class="mr-content" key="step2">
       <section class="mr-section">
         <div class="mr-section__head">
@@ -183,11 +208,16 @@ function handleSubmit() {
         <input v-model="form.portfolioLink" class="mr-input" placeholder="https://behance.net/username" />
       </section>
 
-      <button class="mr-btn" :disabled="registerVendorMutation.isPending.value" @click="handleSubmit">
-        <svg v-if="registerVendorMutation.isPending.value" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
-        {{ registerVendorMutation.isPending.value ? 'Memproses...' : 'Submit for Review' }}
-        <svg v-if="!registerVendorMutation.isPending.value" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <button class="mr-btn" :disabled="registerMerchantMutation.isPending.value" @click="handleSubmit">
+        <svg v-if="registerMerchantMutation.isPending.value" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
+        {{ registerMerchantMutation.isPending.value ? 'Memproses...' : 'Submit for Review' }}
+        <svg v-if="!registerMerchantMutation.isPending.value" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </button>
+      
+      <p v-if="registerMerchantMutation.isError.value" class="mr-error">
+        {{ (registerMerchantMutation.error.value as any)?.response?.data?.message || 'Terjadi kesalahan saat mendaftar.' }}
+      </p>
+
       <p class="mr-terms">Dengan mengklik "Submit for Review", Anda menyetujui <a href="#">Syarat & Ketentuan Vendor</a> serta kebijakan privasi VendorFlow.</p>
     </div>
   </div>
@@ -202,7 +232,6 @@ function handleSubmit() {
 .mr-back:hover { border-color:#2563EB; }
 .mr-title { font-size:1.5rem; font-weight:800; color:#0F172A; letter-spacing:-.02em; }
 
-/* Stepper */
 .stepper { display:flex; align-items:center; justify-content:center; gap:0; margin-bottom:2.5rem; }
 .stepper__item { display:flex; flex-direction:column; align-items:center; gap:.375rem; min-width:100px; }
 .stepper__item span { font-size:.65rem; font-weight:700; color:#9CA3AF; letter-spacing:.04em; text-transform:uppercase; }
@@ -214,7 +243,6 @@ function handleSubmit() {
 .stepper__line { width:60px; height:2px; background:#E5E7EB; margin:0 .25rem; margin-bottom:1.25rem; transition:background .3s; }
 .stepper__line--active { background:#2563EB; }
 
-/* Sections */
 .mr-section { background:#fff; border:1px solid #E5E7EB; border-radius:16px; padding:1.75rem; margin-bottom:1.25rem; animation:fadeUp .5s cubic-bezier(.16,1,.3,1) both; }
 .mr-section__head { display:flex; align-items:flex-start; gap:.75rem; margin-bottom:1.5rem; }
 .mr-section__head h2 { font-size:1.05rem; font-weight:700; color:#0F172A; margin:0; }
@@ -224,7 +252,6 @@ function handleSubmit() {
 .mr-section__icon--green { background:#ECFDF5; color:#059669; }
 .mr-section__icon--purple { background:#F3E8FF; color:#7C3AED; }
 
-/* Form elements */
 .mr-label { display:flex; align-items:center; gap:.375rem; font-size:.8rem; font-weight:600; color:#374151; margin-bottom:.375rem; }
 .mr-input { width:100%; padding:.75rem 1rem; border:1.5px solid #D1D5DB; border-radius:10px; font-family:inherit; font-size:.875rem; color:#0F172A; background:#fff; outline:none; transition:border-color .2s,box-shadow .2s; box-sizing:border-box; }
 .mr-input::placeholder { color:#9CA3AF; }
@@ -236,7 +263,6 @@ function handleSubmit() {
 .mr-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:.75rem; }
 .mr-col { display:flex; flex-direction:column; }
 
-/* Upload */
 .mr-upload { border:2px dashed #D1D5DB; border-radius:12px; padding:1.25rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.375rem; cursor:pointer; transition:border-color .2s,background .2s; text-align:center; }
 .mr-upload:hover { border-color:#2563EB; background:#F8FAFF; }
 .mr-upload--logo { min-height:120px; }
@@ -246,13 +272,11 @@ function handleSubmit() {
 .mr-upload__preview-img { width:80px; height:80px; object-fit:cover; border-radius:8px; }
 .mr-upload__preview-banner { width:100%; max-height:120px; object-fit:cover; border-radius:8px; }
 
-/* Info box */
 .mr-info-box { background:#F0F9FF; border:1px solid #BAE6FD; border-radius:10px; padding:1rem; margin-top:1rem; }
 .mr-info-box__head { display:flex; align-items:center; gap:.375rem; font-size:.8rem; color:#0369A1; margin-bottom:.5rem; }
 .mr-info-box ul { margin:0; padding-left:1.25rem; }
 .mr-info-box li { font-size:.75rem; color:#475569; line-height:1.7; }
 
-/* Button */
 .mr-btn { display:flex; align-items:center; justify-content:center; gap:.5rem; width:100%; max-width:400px; margin:1.5rem auto 0; padding:1rem; background:#2563EB; color:#fff; font-family:inherit; font-size:.9375rem; font-weight:700; border:none; border-radius:10px; cursor:pointer; transition:background .2s,transform .2s,box-shadow .2s; }
 .mr-btn:hover:not(:disabled) { background:#1d4ed8; transform:translateY(-1px); box-shadow:0 4px 16px rgba(37,99,235,.3); }
 .mr-btn:disabled { opacity:.6; cursor:not-allowed; }
@@ -260,6 +284,8 @@ function handleSubmit() {
 .mr-terms { text-align:center; font-size:.73rem; color:#6B7280; margin-top:.75rem; line-height:1.5; }
 .mr-terms a { color:#2563EB; text-decoration:none; }
 .mr-terms a:hover { text-decoration:underline; }
+
+.mr-error { font-size:.8rem; color:#DC2626; text-align:center; margin-top:1rem; animation:fadeUp .3s ease both; }
 
 .spin { animation:spinning .8s linear infinite; }
 @keyframes spinning { to { transform:rotate(360deg); } }

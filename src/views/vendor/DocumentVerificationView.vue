@@ -1,55 +1,55 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
+const { profileQuery, submitKybMutation } = useAuth()
 
-// Mock verification status: 'PENDING_VERIFICATION' | 'REJECTED' | 'ACTIVE'
-const status = ref<'PENDING_VERIFICATION' | 'REJECTED' | 'ACTIVE'>('PENDING_VERIFICATION')
+const merchant = computed(() => profileQuery.data.value?.merchant)
+const status = computed(() => merchant.value?.status || 'INCOMPLETE')
 
-// Mock store data
-const store = ref({
-  name: 'Pixel Perfect Design Studio',
+const store = computed(() => ({
+  name: merchant.value?.shopName || 'Nama Toko Belum Diatur',
   category: 'Creative Services',
-  description: 'Kami menyediakan jasa desain UI/UX modern, branding identitas, dan ilustrasi kustom untuk startup dan UMKM. Berpengalaman lebih dari 5 tahun di industri kreatif.',
+  description: merchant.value?.description || 'Belum ada deskripsi.',
   bankName: 'Bank Central Asia (BCA)',
   bankAccount: '**** 8892',
-  banner: '/images/products/product-1.jpg',
+  banner: merchant.value?.bannerUrl || '/images/products/product-1.jpg',
+}))
+
+const parsedKyb = computed(() => {
+  if (!merchant.value?.kybDocuments) return null
+  try {
+    return JSON.parse(merchant.value.kybDocuments)
+  } catch (e) {
+    return null
+  }
 })
 
-const documents = ref([
-  { name: 'KTP / Identitas', file: 'ktp_john.pdf', status: 'PENDING_VERIFICATION' },
-  { name: 'SK Organisasi', file: 'SK_Organisasi.pdf', status: 'PENDING_VERIFICATION' },
-  { name: 'Portfolio Link', file: 'pixelperfect.net', status: 'PENDING_VERIFICATION', isLink: true },
-])
+const kybDocumentUrl = ref('')
+const portfolioUrl = ref('')
 
-const validatorNote = ref('')
-
-// Demo controls
-function setDemo(s: 'PENDING_VERIFICATION' | 'REJECTED' | 'ACTIVE') {
-  status.value = s
-  if (s === 'REJECTED') {
-    documents.value[0]!.status = 'ACTIVE'
-    documents.value[1]!.status = 'PENDING_VERIFICATION'
-    documents.value[2]!.status = 'ACTIVE'
-    validatorNote.value = '"Terima kasih telah bergabung dengan VendorFlow. Kami membutuhkan verifikasi tambahan pada dokumen SK Organisasi Anda karena resolusi gambar terlalu rendah. Bagian tanda tangan dan cap basah harus terlihat jelas agar kami dapat memvalidasi keaslian dokumen."'
-  } else if (s === 'ACTIVE') {
-    documents.value.forEach(d => d.status = 'ACTIVE')
-    validatorNote.value = '"Terima kasih telah bergabung dengan VendorFlow. Kami membutuhkan verifikasi tambahan pada dokumen SK Organisasi Anda karena resolusi gambar terlalu rendah. Bagian tanda tangan dan cap basah harus terlihat jelas agar kami dapat memvalidasi keaslian dokumen."'
-  } else {
-    documents.value.forEach(d => d.status = 'PENDING_VERIFICATION')
-    validatorNote.value = ''
-  }
+async function handleKybSubmit() {
+  if (!kybDocumentUrl.value || !portfolioUrl.value) return
+  
+  submitKybMutation.mutate({
+    kybDocumentUrl: kybDocumentUrl.value,
+    portfolioUrl: portfolioUrl.value
+  })
 }
 
 function docStatusLabel(s: string) {
   if (s === 'ACTIVE') return 'Terverifikasi'
-  return 'Menunggu'
+  if (s === 'PENDING_VERIFICATION') return 'Menunggu'
+  if (s === 'REJECTED') return 'Ditolak'
+  return 'Belum Diunggah'
 }
 
 function docStatusClass(s: string) {
   if (s === 'ACTIVE') return 'doc-badge--green'
-  return 'doc-badge--orange'
+  if (s === 'PENDING_VERIFICATION') return 'doc-badge--orange'
+  return 'doc-badge--gray'
 }
 </script>
 
@@ -63,34 +63,26 @@ function docStatusClass(s: string) {
     <h1 class="pv-title">Profil & Verifikasi</h1>
     <p class="pv-subtitle">Kelola identitas toko Anda dan pantau proses verifikasi akun.</p>
 
-    <!-- Demo Toggle (dev only) -->
-    <div class="pv-demo">
-      <span>Demo:</span>
-      <button :class="{ active: status === 'PENDING_VERIFICATION' }" @click="setDemo('PENDING_VERIFICATION')">Pending</button>
-      <button :class="{ active: status === 'REJECTED' }" @click="setDemo('REJECTED')">Rejected</button>
-      <button :class="{ active: status === 'ACTIVE' }" @click="setDemo('ACTIVE')">Active</button>
-    </div>
-
     <!-- Status Banner -->
     <div class="pv-banner" :class="`pv-banner--${status}`">
       <div class="pv-banner__icon">
-        <!-- Pending -->
         <svg v-if="status === 'PENDING_VERIFICATION'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <!-- Rejected -->
         <svg v-else-if="status === 'REJECTED'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-        <!-- Active -->
         <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
       </div>
       <div class="pv-banner__text">
         <strong v-if="status === 'PENDING_VERIFICATION'">Sedang Ditinjau</strong>
         <strong v-else-if="status === 'REJECTED'">Pengajuan toko Anda belum dapat disetujui.</strong>
+        <strong v-else-if="status === 'INCOMPLETE'">Profil Belum Lengkap</strong>
         <strong v-else>Toko Anda berhasil diverifikasi! 🎉</strong>
+        
         <p v-if="status === 'PENDING_VERIFICATION'">Tim verifikator kami sedang memeriksa dokumen Anda. Proses ini biasanya memakan waktu 1-2 hari kerja.</p>
-        <p v-else-if="status === 'REJECTED'">Foto KTM kurang jelas (buram) sehingga tidak dapat diverifikasi. Silakan perbaiki data dan kirim ulang untuk proses verifikasi.</p>
+        <p v-else-if="status === 'REJECTED'">{{ merchant?.rejectionReason || 'Silakan perbaiki data dan kirim ulang untuk proses verifikasi.' }}</p>
+        <p v-else-if="status === 'INCOMPLETE'">Lengkapi data toko dan unggah dokumen KYB untuk memulai verifikasi.</p>
         <p v-else>Sekarang Anda sudah dapat mulai menawarkan layanan dan menerima pesanan.</p>
       </div>
       <span class="pv-banner__badge" :class="`pv-banner__badge--${status}`">
-        {{ status === 'PENDING_VERIFICATION' ? 'PENDING_VERIFICATION' : status === 'REJECTED' ? 'DITOLAK' : 'ACTIVE' }}
+        {{ status }}
       </span>
     </div>
 
@@ -104,7 +96,6 @@ function docStatusClass(s: string) {
         </div>
       </div>
 
-      <!-- Banner + Logo overlay -->
       <div class="pv-store-banner">
         <img :src="store.banner" alt="Store banner" class="pv-store-banner__img" />
         <div class="pv-store-logo">
@@ -128,39 +119,39 @@ function docStatusClass(s: string) {
       </div>
     </section>
 
-    <!-- Keamanan Akun -->
-    <div class="pv-security">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      <div>
-        <strong>Keamanan Akun</strong>
-        <p>Pastikan data Anda selalu up-to-date. VendorFlow tidak pernah meminta kata sandi atau PIN melalui kanal komunikasi tidak resmi.</p>
-      </div>
-    </div>
-
     <!-- Dokumen Verifikasi -->
     <h2 class="pv-section-title">Dokumen Verifikasi</h2>
     <div class="pv-docs">
-      <div v-for="doc in documents" :key="doc.name" class="pv-doc">
+      <div class="pv-doc">
         <div class="pv-doc__icon">
-          <svg v-if="!doc.isLink" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
         <div class="pv-doc__info">
-          <span class="pv-doc__name">{{ doc.name }}</span>
-          <span class="pv-doc__file">{{ doc.file }}</span>
+          <span class="pv-doc__name">KTM / SK Organisasi</span>
+          <input v-if="status === 'INCOMPLETE' || status === 'REJECTED'" v-model="kybDocumentUrl" class="field__input text-xs" placeholder="URL Dokumen (KTM/SK)" />
+          <span v-else class="pv-doc__file">{{ parsedKyb?.kybDocumentUrl || 'Sedang diverifikasi' }}</span>
         </div>
-        <span class="doc-badge" :class="docStatusClass(doc.status)">{{ docStatusLabel(doc.status) }}</span>
-        <button class="pv-doc__action" aria-label="Open">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        </button>
+        <span class="doc-badge" :class="docStatusClass(status)">{{ docStatusLabel(status) }}</span>
+      </div>
+
+      <div class="pv-doc">
+        <div class="pv-doc__icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div class="pv-doc__info">
+          <span class="pv-doc__name">Portofolio</span>
+          <input v-if="status === 'INCOMPLETE' || status === 'REJECTED'" v-model="portfolioUrl" class="field__input text-xs" placeholder="URL Portofolio" />
+          <span v-else class="pv-doc__file">{{ parsedKyb?.portfolioUrl || 'Sedang diverifikasi' }}</span>
+        </div>
+        <span class="doc-badge" :class="docStatusClass(status)">{{ docStatusLabel(status) }}</span>
       </div>
     </div>
 
     <!-- Catatan Validator -->
-    <template v-if="validatorNote && (status === 'REJECTED' || status === 'ACTIVE')">
+    <template v-if="merchant?.rejectionReason && status === 'REJECTED'">
       <h2 class="pv-section-title">Catatan Validator</h2>
       <div class="pv-validator-note">
-        <p>{{ validatorNote }}</p>
+        <p>"{{ merchant.rejectionReason }}"</p>
         <div class="pv-validator-note__author">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           <span>Verification Team</span>
@@ -168,20 +159,20 @@ function docStatusClass(s: string) {
       </div>
     </template>
 
-    <!-- Butuh Bantuan -->
-    <div class="pv-help">
-      <strong>Butuh Bantuan?</strong>
-      <p>Hubungi pusat bantuan kami jika Anda mengalami kesulitan dalam proses verifikasi atau pengunggahan dokumen.</p>
-      <button class="pv-help__btn">Hubungi CS</button>
-    </div>
-
     <!-- Bottom Action -->
     <div class="pv-bottom">
       <button v-if="status === 'ACTIVE'" class="pv-btn pv-btn--green" @click="router.push('/vendor/dashboard')">
         Mulai kelola Toko
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </button>
-      <button v-else class="pv-btn pv-btn--blue">Edit Data</button>
+      <button 
+        v-else-if="status === 'INCOMPLETE' || status === 'REJECTED'" 
+        class="pv-btn pv-btn--blue" 
+        :disabled="submitKybMutation.isPending.value"
+        @click="handleKybSubmit"
+      >
+        {{ submitKybMutation.isPending.value ? 'Memproses...' : 'Kirim Verifikasi' }}
+      </button>
     </div>
   </div>
 </template>

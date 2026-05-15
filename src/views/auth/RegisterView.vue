@@ -2,11 +2,13 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth'
+import { useRegistrationStore } from '../../store/registration.store'
 
 const router = useRouter()
-const { loginMutation } = useAuth()
+const { signUpMutation } = useAuth()
+const registrationStore = useRegistrationStore()
 
-const step = ref(1) // 1 | 2 | 3
+const step = ref(1)
 
 const form = reactive({
   email: '',
@@ -14,11 +16,21 @@ const form = reactive({
   confirmPassword: '',
   username: '',
   role: '' as '' | 'CLIENT' | 'MERCHANT',
+  shopName: '',
+  description: '',
+  logoUrl: '',
+  bannerUrl: '',
+  bankName: '',
+  accountNumber: '',
+  accountHolderName: '',
 })
 
 const showPw = ref(false)
 const showConfirmPw = ref(false)
 const pwError = ref('')
+const regError = ref('')
+
+const isProcessing = computed(() => signUpMutation.isPending.value)
 
 const passwordStrength = computed(() => {
   const p = form.password
@@ -59,29 +71,48 @@ function selectRole(r: 'CLIENT' | 'MERCHANT') {
   form.role = r
 }
 
+function handleFile(type: 'logo' | 'banner', e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    if (type === 'logo') form.logoUrl = ev.target?.result as string
+    if (type === 'banner') form.bannerUrl = ev.target?.result as string
+  }
+  reader.readAsDataURL(f)
+}
+
 function handleFinish() {
   if (!form.role) return
+  regError.value = ''
+  
   if (form.role === 'MERCHANT') {
+    registrationStore.setCredentials({
+      email: form.email,
+      password: form.password,
+      username: form.username,
+      role: form.role
+    })
     router.push('/daftar/merchant')
-    return
+  } else {
+    signUpMutation.mutate({
+      email: form.email,
+      password: form.password,
+      username: form.username,
+      role: form.role,
+    }, {
+      onError: (err: any) => {
+        regError.value = err.response?.data?.message || 'Terjadi kesalahan saat mendaftar. Silakan coba lagi.'
+      }
+    })
   }
-  loginMutation.mutate({
-    email: form.email,
-    password: form.password,
-    role: form.role,
-  })
 }
 </script>
 
 <template>
   <div class="auth-page">
-
-    <!-- ══ LEFT: FORM PANEL ══ -->
     <div class="auth-panel auth-panel--form">
-
-      <!-- STEP 1 — Credentials -->
       <div v-if="step === 1" class="auth-form-box" key="step1">
-        <!-- Back to login -->
         <router-link to="/masuk/user" class="back-link">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </router-link>
@@ -117,7 +148,6 @@ function handleFinish() {
                 <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
-            <!-- Strength bar -->
             <div v-if="form.password" class="strength-bar">
               <div
                 class="strength-bar__fill"
@@ -161,7 +191,6 @@ function handleFinish() {
         </form>
       </div>
 
-      <!-- STEP 2 — Username -->
       <div v-else-if="step === 2" class="auth-form-box" key="step2">
         <button class="back-link" type="button" @click="step = 1" aria-label="Kembali">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -192,20 +221,17 @@ function handleFinish() {
         </form>
       </div>
 
-      <!-- STEP 3 — Role Selection -->
-      <div v-else class="auth-form-box auth-form-box--wide" key="step3">
-        <!-- Logo placeholder -->
+      <div v-else-if="step === 3" class="auth-form-box auth-form-box--wide" key="step3">
         <div class="brand-logo">
           <img src="/images/logo.png" alt="LayananPro Logo" width="32" height="32" />
           <span>LayananPro</span>
         </div>
 
         <h1 class="auth-heading" style="font-size:1.375rem; margin-bottom:.5rem;">
-          Akun Anda berhasil dibuat! Apa tujuan Anda menggunakan
+          Satu langkah lagi! Apa tujuan Anda menggunakan
         </h1>
 
         <div class="role-grid">
-          <!-- CLIENT -->
           <button
             id="role-client"
             type="button"
@@ -220,7 +246,6 @@ function handleFinish() {
             <span class="role-card__desc">Saya ingin mencari jasa</span>
           </button>
 
-          <!-- MERCHANT -->
           <button
             id="role-merchant"
             type="button"
@@ -236,22 +261,23 @@ function handleFinish() {
           </button>
         </div>
 
+        <p v-if="regError" class="auth-error" style="margin-top: 1rem;">{{ regError }}</p>
+
         <button
           id="reg-finish"
           type="button"
           class="auth-btn auth-btn--arrow"
-          :disabled="!form.role || loginMutation.isPending.value"
+          :disabled="!form.role || isProcessing"
           @click="handleFinish"
           style="margin-top: 1.5rem;"
         >
-          <svg v-if="loginMutation.isPending.value" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
-          <span>{{ loginMutation.isPending.value ? 'Memproses...' : 'Lanjut' }}</span>
-          <svg v-if="!loginMutation.isPending.value" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          <svg v-if="isProcessing" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
+          <span>{{ isProcessing ? 'Memproses...' : 'Selesaikan Pendaftaran' }}</span>
+          <svg v-if="!isProcessing" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
       </div>
     </div>
 
-    <!-- ══ RIGHT: PHOTO PANEL ══ -->
     <div class="auth-panel auth-panel--photo">
       <img
         src="/images/auth-team.jpg"
@@ -273,7 +299,6 @@ function handleFinish() {
   background: #fff;
 }
 
-/* ── PANELS ── */
 .auth-panel {
   flex: 1;
   display: flex;
@@ -300,7 +325,6 @@ function handleFinish() {
   display: block;
 }
 
-/* ── FORM BOX ── */
 .auth-form-box {
   width: 100%;
   max-width: 360px;
@@ -309,7 +333,6 @@ function handleFinish() {
 
 .auth-form-box--wide { max-width: 420px; }
 
-/* ── BACK LINK ── */
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -330,7 +353,6 @@ function handleFinish() {
   box-shadow: 0 0 0 3px rgba(37,99,235,.1);
 }
 
-/* ── HEADING ── */
 .auth-heading {
   font-size: 2rem;
   font-weight: 800;
@@ -340,7 +362,6 @@ function handleFinish() {
   line-height: 1.2;
 }
 
-/* ── BRAND LOGO ── */
 .brand-logo {
   display: flex;
   align-items: center;
@@ -351,7 +372,6 @@ function handleFinish() {
   color: #0F172A;
 }
 
-/* ── FORM ── */
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -410,7 +430,6 @@ function handleFinish() {
 }
 .field__eye:hover { color: #374151; }
 
-/* ── STRENGTH ── */
 .strength-bar {
   height: 4px;
   background: #E5E7EB;
@@ -438,7 +457,6 @@ function handleFinish() {
 .strength-label--3 { color: #10B981; }
 .strength-label--4 { color: #059669; }
 
-/* ── FORGOT ── */
 .field__forgot-row {
   display: flex;
   justify-content: flex-end;
@@ -451,7 +469,6 @@ function handleFinish() {
 }
 .field__forgot:hover { text-decoration: underline; }
 
-/* ── AUTH BTN ── */
 .auth-btn {
   display: flex;
   align-items: center;
@@ -476,7 +493,6 @@ function handleFinish() {
 }
 .auth-btn:disabled { opacity: .6; cursor: not-allowed; }
 
-/* ── ROLE GRID ── */
 .role-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -535,7 +551,31 @@ function handleFinish() {
   line-height: 1.4;
 }
 
-/* ── ERROR ── */
+.file-upload-box {
+  border: 2px dashed #E5E7EB;
+  border-radius: 12px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: #9CA3AF;
+  transition: all 0.2s;
+  background: #F9FAFB;
+}
+.file-upload-box:hover {
+  border-color: #2563EB;
+  background: #EFF6FF;
+  color: #2563EB;
+}
+.upload-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .auth-error {
   font-size: .8rem;
   color: #DC2626;
@@ -543,7 +583,6 @@ function handleFinish() {
   margin: 0;
 }
 
-/* ── SWITCH ── */
 .auth-switch {
   text-align: center;
   font-size: .8rem;
@@ -557,17 +596,14 @@ function handleFinish() {
 }
 .auth-switch__link:hover { text-decoration: underline; }
 
-/* ── SPINNER ── */
 .spin { animation: spinning .8s linear infinite; }
 @keyframes spinning { to { transform: rotate(360deg); } }
 
-/* ── ENTRANCE ── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── RESPONSIVE ── */
 @media (max-width: 768px) {
   .auth-panel--photo { display: none; }
   .auth-panel--form  { min-height: 100vh; padding: 2rem 1.5rem; }
