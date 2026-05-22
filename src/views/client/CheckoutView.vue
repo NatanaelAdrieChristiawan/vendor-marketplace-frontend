@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api/axios'
+import { useQuery } from '@tanstack/vue-query'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,9 +23,25 @@ const gig = ref<any>(null)
 const isLoading = ref(true)
 const isProcessing = ref(false)
 
-// Simulated fees
-const serviceFee = 25000
-const totalPrice = computed(() => chosenPrice.value + serviceFee)
+const configQuery = useQuery({
+  queryKey: ['systemConfigs'],
+  queryFn: async () => {
+    const res = await api.get('/system-config')
+    return res.data
+  },
+  staleTime: 1000 * 60 * 10
+})
+
+const serviceFee = computed(() => {
+  const configs = configQuery.data.value
+  if (!configs) return 25000
+  const entry = Array.isArray(configs)
+    ? configs.find((c: any) => c.key === 'service_fee')
+    : configs.service_fee
+  return entry ? Number(entry.value ?? entry) : 25000
+})
+
+const totalPrice = computed(() => chosenPrice.value + serviceFee.value)
 
 // Payment method
 type PaymentMethod = 'va' | 'qris' | 'manual'
@@ -79,30 +96,35 @@ async function processPayment() {
   isProcessing.value = true
 
   try {
-    // 1. Create order in Backend
-    const orderRes = await api.post('/orders', { gigId: Number(productId) })
-    const orderId = orderRes.data.id
+    const existingOrderId = route.query.orderId ? Number(route.query.orderId) : null
+    let orderId = existingOrderId
 
-    // 2. Create chat channel
-    try {
-      await api.post('/chat/create-channel', { gigId: Number(productId) })
-    } catch (chatErr) {
-      console.warn('Failed to auto-create Stream Chat channel', chatErr)
+    if (!orderId) {
+      // 1. Create order in Backend
+      const orderRes = await api.post('/orders', { gigId: Number(productId) })
+      orderId = orderRes.data.id
+
+      // 2. Create chat channel
+      try {
+        await api.post('/chat/create-channel', { gigId: Number(productId) })
+      } catch (chatErr) {
+        console.warn('Failed to auto-create Stream Chat channel', chatErr)
+      }
     }
 
-    // 3. Save automated chat message to localStorage for mockup chat UI
-    const automatedMsg = {
-      orderId: `#ORD-${orderId}`,
-      gigId: productId,
-      plan: planName.value,
-      price: chosenPrice.value,
-      notes: notes.value || 'Tidak ada catatan.',
-      files: files.value,
-      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    // 3. Send requirements metadata to order
+    if (notes.value || files.value) {
+      try {
+        await api.patch(`/orders/${orderId}/requirements`, {
+          plan: planName.value,
+          price: chosenPrice.value,
+          notes: notes.value || 'Tidak ada catatan.',
+          files: files.value
+        })
+      } catch (reqErr) {
+        console.warn('Failed to save order requirements', reqErr)
+      }
     }
-    const existingMsgs = JSON.parse(localStorage.getItem('automated_chat_messages') || '[]')
-    existingMsgs.push(automatedMsg)
-    localStorage.setItem('automated_chat_messages', JSON.stringify(existingMsgs))
 
     // 4. Handle based on payment method
     if (selectedPayment.value === 'manual') {

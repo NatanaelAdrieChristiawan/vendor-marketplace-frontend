@@ -3,11 +3,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api/axios'
 import { useAuth } from '../../composables/useAuth'
+import { useQueryClient } from '@tanstack/vue-query'
 
 const route = useRoute()
 const router = useRouter()
 const orderId = route.params.id as string
 const { uploadFile } = useAuth()
+const queryClient = useQueryClient()
 
 const order = ref<any>(null)
 const isLoading = ref(true)
@@ -44,18 +46,6 @@ function getStepState(idx: number) {
   return 'pending'
 }
 
-function getSavedRequirements(id: number) {
-  try {
-    const msgsStr = localStorage.getItem('automated_chat_messages')
-    if (msgsStr) {
-      const msgs = JSON.parse(msgsStr)
-      return msgs.find((m: any) => m.orderId === `#ORD-${id}` || Number(m.orderId.replace('#ORD-', '')) === id)
-    }
-  } catch (e) {
-    console.error('Error loading requirements', e)
-  }
-  return null
-}
 
 function getFilename(url: string) {
   if (!url) return ''
@@ -98,40 +88,23 @@ async function fetchOrderDetail() {
     const res = await api.get('/orders/incoming')
     const found = res.data.find((o: any) => o.id === Number(orderId))
     if (found) {
-      // Status override from localStorage (e.g. IN_REVISION)
-      const overrideStatus = localStorage.getItem(`order_status_override_${orderId}`)
-      if (overrideStatus) {
-        found.status = overrideStatus
-      }
-      
-      // Check accepted state
-      isAccepted.value = localStorage.getItem(`order_accepted_${orderId}`) === 'true'
-      
-      // Get requirements from automated chat messages in localStorage
-      const reqData = getSavedRequirements(found.id)
-      
-      // Read revision history from localStorage
-      const revisionHistory = JSON.parse(localStorage.getItem(`order_revision_history_${orderId}`) || '[]')
-      
-      // Combine with deliverables if any
+      isAccepted.value = found.status !== 'IN_PROGRESS' || !!found.acceptedAt
       order.value = {
         ...found,
-        instructions: reqData?.notes || 'Tidak ada instruksi khusus dari pembeli.',
-        planName: reqData?.plan || 'Standard Plan',
-        chosenPrice: reqData?.price || found.totalAmount,
-        attachments: reqData?.files ? reqData.files.split(',').map((url: string) => ({
-          name: getFilename(url),
-          url: url,
-          size: 'Uploaded',
-          type: getFileExtension(url).toLowerCase()
-        })) : [],
-        revisionHistory: revisionHistory.length > 0 ? revisionHistory : [
-          {
-            type: 'started',
-            label: 'PESANAN DIMULAI',
-            time: formatDate(found.createdAt || new Date().toISOString()),
-          }
-        ]
+        instructions: found.requirements?.notes || 'Tidak ada instruksi khusus dari pembeli.',
+        planName: found.requirements?.plan || 'Standard Plan',
+        chosenPrice: found.requirements?.price || found.totalAmount,
+        attachments: found.requirements?.files
+          ? found.requirements.files.split(',').map((url: string) => ({
+              name: getFilename(url),
+              url: url,
+              size: 'Uploaded',
+              type: getFileExtension(url).toLowerCase()
+            }))
+          : [],
+        revisionHistory: found.revisions?.length > 0
+          ? found.revisions
+          : [{ type: 'started', label: 'PESANAN DIMULAI', time: formatDate(found.createdAt || new Date().toISOString()) }]
       }
     }
   } catch (err) {
@@ -145,12 +118,11 @@ async function acceptOrder() {
   try {
     isLoading.value = true
     await api.patch(`/orders/${orderId}/accept`)
-    localStorage.setItem(`order_accepted_${orderId}`, 'true')
+    queryClient.invalidateQueries({ queryKey: ['orders', 'incoming'] })
     isAccepted.value = true
     alert('Pesanan berhasil diterima!')
     await fetchOrderDetail()
   } catch (err: any) {
-    console.error('Failed to accept order', err)
     alert(err.response?.data?.message || 'Gagal menerima pesanan.')
   } finally {
     isLoading.value = false
@@ -214,50 +186,26 @@ async function submitDelivery() {
     alert('Pesan untuk klien tidak boleh kosong.')
     return
   }
-  
   isSubmitting.value = true
   try {
     for (const file of rawFiles.value) {
-      // 1. Upload to storage
       const uploadRes = await uploadFile(file, 'merchant-assets')
       const fileUrl = uploadRes.url || uploadRes.data?.url
-      if (!fileUrl) {
-        throw new Error('Gagal mengunggah file')
-      }
-      
-      // 2. Submit deliverable
+      if (!fileUrl) throw new Error('Gagal mengunggah file')
       await api.post('/deliverables', {
         orderId: Number(orderId),
         fileUrl: fileUrl,
         message: deliveryMessage.value
       })
     }
-    
-    // Clear status override (since backend status transitions to DELIVERED)
-    localStorage.removeItem(`order_status_override_${orderId}`)
-    
-    // Save to revision history local storage
-    const deliveryEntry = {
-      type: 'delivery',
-      label: 'PENGIRIMAN AWAL',
-      time: new Date().toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', year: 'numeric' }),
-      message: `"${deliveryMessage.value}"`,
-    }
-    const historyKey = `order_revision_history_${orderId}`
-    const existing = JSON.parse(localStorage.getItem(historyKey) || '[]')
-    existing.unshift(deliveryEntry)
-    localStorage.setItem(historyKey, JSON.stringify(existing))
-    
+    queryClient.invalidateQueries({ queryKey: ['deliverables', orderId] })
+    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
     alert('Hasil pekerjaan berhasil dikirim!')
-    
-    // Reset form
     rawFiles.value = []
     deliveryFiles.value = []
     deliveryMessage.value = ''
-    
     await fetchOrderDetail()
   } catch (err: any) {
-    console.error('Failed to submit delivery', err)
     alert(err.response?.data?.message || 'Gagal mengirim hasil pekerjaan.')
   } finally {
     isSubmitting.value = false

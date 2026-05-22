@@ -1,59 +1,22 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useMerchantDetail, useMerchantFinancial, useMerchantWithdrawals } from '../../composables/useMerchants'
 
 const router = useRouter()
 const route = useRoute()
+const merchantId = route.params.id as string
 
-const merchant = ref({
-  id: Number(route.params.id),
-  name: 'Creativ Studio',
-  status: 'Aktif',
-  color: '#2A437E',
-  initial: 'CS',
-})
+const merchantQuery = useMerchantDetail(merchantId)
+const financialQuery = useMerchantFinancial(merchantId)
+const withdrawalsQuery = useMerchantWithdrawals(merchantId)
 
-const summaryCards = [
-  {
-    label: 'Pendapatan Aplikasi',
-    value: 'Rp 350.000',
-    description: 'Pendapatan yang diperoleh aplikasi dari fee/komisi dari merchant',
-    color: '#2A437E',
-    iconPath: 'M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z',
-  },
-  {
-    label: 'Pendapatan Merchant',
-    value: 'Rp 350.000',
-    description: null,
-    saldoOnHold: 'Rp150.500',
-    color: '#16A34A',
-    iconPath: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
-  },
-  {
-    label: 'Total Transaksi',
-    value: 'Rp 350.000',
-    description: 'Gabungan total transaksi dari aplikasi dan merchant',
-    color: '#0EA5E9',
-    iconPath: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
-  },
-  {
-    label: 'Dana Sudah Dicairkan',
-    value: 'Rp 350.000',
-    description: 'Total dana yang telah dicarikan ke rekening Merchant',
-    color: '#EA580C',
-    iconPath: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
-  },
-]
-
-const transactions = ref([
-  { vendor: 'Creativ Studio', status: 'Disetujui', jumlah: 'Rp150.000', tanggal: '24 Maret 2026, 10:45 AM' },
-  { vendor: 'Creativ Studio', status: 'Disetujui', jumlah: 'Rp150.000', tanggal: '24 Maret 2026, 10:45 AM' },
-  { vendor: 'Creativ Studio', status: 'Disetujui', jumlah: 'Rp150.000', tanggal: '24 Maret 2026, 10:45 AM' },
-  { vendor: 'Creativ Studio', status: 'Disetujui', jumlah: 'Rp150.000', tanggal: '24 Maret 2026, 10:45 AM' },
-])
+const merchant = computed(() => merchantQuery.data.value)
+const financial = computed(() => financialQuery.data.value)
+const transactions = computed(() => withdrawalsQuery.data.value || [])
 
 const currentPage = ref(1)
-const totalPages = computed(() => 10)
+const totalPages = computed(() => Math.ceil(transactions.value.length / 10) || 1)
 
 const paginationPages = computed(() => {
   const total = totalPages.value
@@ -63,6 +26,48 @@ const paginationPages = computed(() => {
   pages.push(total - 2, total - 1, total)
   return pages
 })
+
+const summaryCards = computed(() => [
+  {
+    label: 'Pendapatan Aplikasi',
+    value: financial.value ? formatPrice(financial.value.appRevenue) : '-',
+    description: 'Pendapatan yang diperoleh aplikasi dari fee/komisi dari merchant',
+    color: '#2A437E',
+    iconPath: 'M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z',
+  },
+  {
+    label: 'Pendapatan Merchant',
+    value: financial.value ? formatPrice(financial.value.merchantRevenue) : '-',
+    description: null,
+    saldoOnHold: financial.value ? formatPrice(financial.value.onHoldBalance) : null,
+    color: '#16A34A',
+    iconPath: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+  },
+  {
+    label: 'Total Transaksi',
+    value: financial.value ? formatPrice(financial.value.totalTransactions) : '-',
+    description: 'Gabungan total transaksi dari aplikasi dan merchant',
+    color: '#0EA5E9',
+    iconPath: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+  },
+  {
+    label: 'Dana Sudah Dicairkan',
+    value: financial.value ? formatPrice(financial.value.disbursed) : '-',
+    description: 'Total dana yang telah dicarikan ke rekening Merchant',
+    color: '#EA580C',
+    iconPath: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  },
+])
+
+function formatPrice(val: any) {
+  if (!val && val !== 0) return '-'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
 
 function goBack() {
   router.push('/finance-admin/merchant-recap')
@@ -80,17 +85,17 @@ function goBack() {
 
     <!-- Merchant Header Card -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-      <div class="flex items-center gap-4">
+      <div v-if="!merchant" class="text-sm text-gray-400">Memuat data merchant...</div>
+      <div v-else class="flex items-center gap-4">
         <div
-          class="w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0"
-          :style="{ backgroundColor: merchant.color }"
+          class="w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0 bg-[#2A437E]"
         >
-          {{ merchant.initial }}
+          {{ merchant.shopName?.slice(0, 2).toUpperCase() || 'M' }}
         </div>
         <div class="flex items-center gap-3">
-          <h1 class="text-2xl font-black text-gray-900">{{ merchant.name }}</h1>
+          <h1 class="text-2xl font-black text-gray-900">{{ merchant?.shopName }}</h1>
           <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
-            {{ merchant.status }}
+            {{ merchant?.status }}
           </span>
         </div>
       </div>
@@ -152,7 +157,7 @@ function goBack() {
           <tbody class="divide-y divide-gray-100">
             <tr v-for="(tx, i) in transactions" :key="i" class="hover:bg-gray-50/50 transition-colors">
               <td class="px-6 py-5">
-                <span class="text-sm font-bold text-gray-900">{{ tx.vendor }}</span>
+                <span class="text-sm font-bold text-gray-900">{{ tx.merchant?.shopName || tx.merchantName || '-' }}</span>
               </td>
               <td class="px-6 py-5">
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200">
@@ -161,10 +166,10 @@ function goBack() {
                 </span>
               </td>
               <td class="px-6 py-5">
-                <span class="text-sm font-medium text-gray-700">{{ tx.jumlah }}</span>
+                <span class="text-sm font-medium text-gray-700">{{ formatPrice(tx.amount) }}</span>
               </td>
               <td class="px-6 py-5">
-                <span class="text-sm text-gray-500">{{ tx.tanggal }}</span>
+                <span class="text-sm text-gray-500">{{ formatDate(tx.createdAt) }}</span>
               </td>
             </tr>
           </tbody>

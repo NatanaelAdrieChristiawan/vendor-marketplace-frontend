@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth'
+import api from '../../api/axios'
+import { useQueryClient } from '@tanstack/vue-query'
 
 const route = useRoute()
 const router = useRouter()
 const orderId = route.params.id as string
-
 const { uploadFile } = useAuth()
+const queryClient = useQueryClient()
 
 const revisionText = ref('')
 const isDragging = ref(false)
@@ -46,18 +48,6 @@ function removeFile(idx: number) {
   rawFiles.value.splice(idx, 1)
 }
 
-function getFilename(url: string) {
-  if (!url) return ''
-  try {
-    const parts = url.split('/')
-    const last = parts[parts.length - 1]
-    if (!last) return 'revision_attachment'
-    return decodeURIComponent(last.split('?')[0] || '')
-  } catch (e) {
-    return 'revision_attachment'
-  }
-}
-
 async function submitRevision() {
   if (!revisionText.value.trim()) {
     alert('Umpan balik revisi tidak boleh kosong.')
@@ -70,34 +60,18 @@ async function submitRevision() {
     for (const file of rawFiles.value) {
       const uploadRes = await uploadFile(file, 'merchant-assets')
       const fileUrl = uploadRes.url || uploadRes.data?.url
-      if (fileUrl) {
-        fileUrls.push(fileUrl)
-      }
+      if (fileUrl) fileUrls.push(fileUrl)
     }
-    
-    // Save to revision history local storage
-    const revisionEntry = {
-      type: 'revision_requested',
-      label: 'REVISI DIMINTA',
-      time: new Date().toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', year: 'numeric' }),
-      message: `"${revisionText.value}"`,
-      attachment: fileUrls.length > 0 && fileUrls[0] ? getFilename(fileUrls[0]) : null,
+    await api.post(`/orders/${orderId}/request-revision`, {
+      message: revisionText.value,
       attachments: fileUrls
-    }
-    
-    const historyKey = `order_revision_history_${orderId}`
-    const existing = JSON.parse(localStorage.getItem(historyKey) || '[]')
-    existing.unshift(revisionEntry)
-    localStorage.setItem(historyKey, JSON.stringify(existing))
-    
-    // Set status override
-    localStorage.setItem(`order_status_override_${orderId}`, 'IN_REVISION')
-    
+    })
+    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
+    queryClient.invalidateQueries({ queryKey: ['revisions', orderId] })
     alert('Permintaan revisi berhasil dikirim!')
     router.push(`/pesanan/${orderId}`)
   } catch (err: any) {
-    console.error('Failed to submit revision', err)
-    alert('Gagal mengirim permintaan revisi. Silakan coba lagi.')
+    alert(err.response?.data?.message || 'Gagal mengirim permintaan revisi. Silakan coba lagi.')
   } finally {
     isUploading.value = false
   }

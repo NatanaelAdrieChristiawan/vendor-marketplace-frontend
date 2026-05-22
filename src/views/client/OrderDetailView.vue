@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api/axios'
+import { useQueryClient } from '@tanstack/vue-query'
 
 const route = useRoute()
 const router = useRouter()
 const orderId = route.params.id as string
+const queryClient = useQueryClient()
 
 const order = ref<any>(null)
 const isLoading = ref(true)
@@ -35,19 +37,6 @@ function getFileExtension(url: string) {
   const filename = getFilename(url)
   const dotIdx = filename.lastIndexOf('.')
   return dotIdx !== -1 ? filename.substring(dotIdx + 1).toUpperCase() : 'FILE'
-}
-
-function getSavedRequirements(id: number) {
-  try {
-    const msgsStr = localStorage.getItem('automated_chat_messages')
-    if (msgsStr) {
-      const msgs = JSON.parse(msgsStr)
-      return msgs.find((m: any) => m.orderId === `#ORD-${id}` || Number(m.orderId.replace('#ORD-', '')) === id)
-    }
-  } catch (e) {
-    console.error('Error loading requirements', e)
-  }
-  return null
 }
 
 function formatPrice(val: any) {
@@ -101,21 +90,14 @@ async function fetchOrderDetail() {
     const res = await api.get('/orders/my-orders')
     const found = res.data.find((o: any) => o.id === Number(orderId))
     if (found) {
-      const overrideStatus = localStorage.getItem(`order_status_override_${orderId}`)
-      if (overrideStatus) {
-        found.status = overrideStatus
-      }
-      
-      const reqData = getSavedRequirements(found.id)
       order.value = {
         ...found,
-        instructions: reqData?.notes || 'Tidak ada instruksi khusus dari pembeli.',
-        planName: reqData?.plan || 'Standard Plan',
-        chosenPrice: reqData?.price || found.totalAmount,
-        requirementsFile: reqData?.files || null
+        instructions: found.requirements?.notes || 'Tidak ada instruksi khusus dari pembeli.',
+        planName: found.requirements?.plan || 'Standard Plan',
+        chosenPrice: found.requirements?.price || found.totalAmount,
+        requirementsFile: found.requirements?.files || null
       }
-      
-      // Map uppercase statuses to standard UI statuses
+
       if (found.status === 'IN_PROGRESS' || found.status === 'IN_REVISION' || found.status === 'DISPUTE_IN_PROGRESS') {
         status.value = 'in-progress'
       } else if (found.status === 'DELIVERED') {
@@ -125,12 +107,12 @@ async function fetchOrderDetail() {
       } else {
         status.value = found.status.toLowerCase()
       }
-      
+
       if (found.deadline) {
         deadline.value = formatDate(found.deadline)
         startCountdown(new Date(found.deadline))
       }
-      
+
       if (found.review) {
         rating.value = found.review.rating
         reviewText.value = found.review.comment || ''
@@ -146,12 +128,12 @@ async function fetchOrderDetail() {
 async function completeOrder() {
   try {
     isLoading.value = true
-    localStorage.removeItem(`order_status_override_${orderId}`)
     await api.patch(`/orders/${orderId}/complete`)
+    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
+    queryClient.invalidateQueries({ queryKey: ['orders', 'my'] })
     alert('Pesanan berhasil diselesaikan!')
     await fetchOrderDetail()
   } catch (err: any) {
-    console.error('Failed to complete order', err)
     alert(err.response?.data?.message || 'Gagal menyelesaikan pesanan.')
   } finally {
     isLoading.value = false
@@ -182,10 +164,10 @@ async function submitReview() {
       rating: rating.value,
       comment: reviewText.value
     })
+    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
     alert('Ulasan berhasil dikirim!')
     await fetchOrderDetail()
   } catch (err: any) {
-    console.error('Failed to submit review', err)
     alert(err.response?.data?.message || 'Gagal mengirim ulasan.')
   } finally {
     isLoading.value = false
@@ -197,21 +179,6 @@ function initObserver() {
     entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('vis'); obs.unobserve(e.target) } })
   }, { threshold: 0.08 })
   document.querySelectorAll('.ai:not(.vis)').forEach((el) => obs.observe(el))
-}
-
-async function setStatus(s: string) {
-  // Debug mode helper
-  status.value = s
-  if (s === 'in-progress') {
-    localStorage.setItem(`order_status_override_${orderId}`, 'IN_PROGRESS')
-  } else if (s === 'delivered') {
-    localStorage.setItem(`order_status_override_${orderId}`, 'DELIVERED')
-  } else if (s === 'completed') {
-    localStorage.setItem(`order_status_override_${orderId}`, 'COMPLETED')
-  }
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-  await nextTick()
-  initObserver()
 }
 
 function goBack() { router.push('/pesanan') }
@@ -234,13 +201,6 @@ onUnmounted(() => {
   <button class="od__back ai" @click="goBack" aria-label="Kembali">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
   </button>
-
-  <!-- DEBUG: Status switcher (remove in production) -->
-  <div class="od__debug ai" style="transition-delay:50ms">
-    <button @click="setStatus('in-progress')" :class="{active: status==='in-progress'}">In Progress</button>
-    <button @click="setStatus('delivered')" :class="{active: status==='delivered'}">Delivered</button>
-    <button @click="setStatus('completed')" :class="{active: status==='completed'}">Completed</button>
-  </div>
 
   <div v-if="isLoading" class="p-8 text-center bg-white rounded-xl border border-gray-150">
     <p class="text-gray-500 text-sm">Memuat detail pesanan...</p>
@@ -266,12 +226,57 @@ onUnmounted(() => {
 
       <h1 class="od__title ai" style="transition-delay:80ms">{{ order?.gig?.title || 'Pembuatan Brand Identity & Logo' }}</h1>
       <div class="od__grid">
-        <div class="status-card ai" style="transition-delay:160ms">
-          <div class="status-card__icon">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <div>
+          <div class="status-card ai" style="transition-delay:160ms">
+            <div class="status-card__icon">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <h2 class="status-card__heading">SEDANG DALAM PROSES</h2>
+            <p class="status-card__desc">Saat ini vendor kami sedang dalam tahap pengerjaan pesanan Anda. Kami memastikan setiap detail sesuai dengan arahan awal yang Anda berikan.</p>
           </div>
-          <h2 class="status-card__heading">SEDANG DALAM PROSES</h2>
-          <p class="status-card__desc">Saat ini vendor kami sedang dalam tahap pengerjaan pesanan Anda. Kami memastikan setiap detail sesuai dengan arahan awal yang Anda berikan.</p>
+
+          <!-- Files Card (Deliverables) -->
+          <div v-if="order?.deliverables?.length" class="files-card ai" style="margin-top: 1.5rem; transition-delay:200ms">
+            <h3>File Hasil Kerja (Sebelumnya)</h3>
+            <div v-for="f in order?.deliverables" :key="f.id" class="file-row">
+              <div class="file-row__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="file-row__info">
+                <strong>{{ getFilename(f.fileUrl) }}</strong>
+                <span>Format: {{ getFileExtension(f.fileUrl) }} &nbsp; Pesan: {{ f.message || '-' }}</span>
+              </div>
+              <a :href="f.fileUrl" target="_blank" download class="file-row__dl" aria-label="Download">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </a>
+            </div>
+          </div>
+
+          <!-- Revision History Card -->
+          <div v-if="order?.revisionHistory?.length" class="files-card ai" style="margin-top: 1.5rem; transition-delay:220ms">
+            <h3>Riwayat Revisi</h3>
+            <div v-for="(rev, idx) in order.revisionHistory" :key="idx" class="revision-log-row" style="border-left: 3px solid #DC2626; padding-left: 1rem; margin-bottom: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #DC2626;">{{ rev.label }}</span>
+                <span style="font-size: 0.75rem; color: #9CA3AF;">{{ rev.time }}</span>
+              </div>
+              <p style="font-size: 0.875rem; color: #374151; margin: 0 0 0.5rem 0;">{{ rev.message }}</p>
+              <div v-if="rev.attachments && rev.attachments.length" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 600; color: #4B5563;">File Referensi:</span>
+                <div v-for="att in rev.attachments" :key="att" class="file-row" style="padding: 0.5rem; margin-bottom: 0.5rem;">
+                  <div class="file-row__icon" style="width: 28px; height: 28px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div class="file-row__info">
+                    <strong style="font-size: 0.75rem;">{{ getFilename(att) }}</strong>
+                  </div>
+                  <a :href="att" target="_blank" download class="file-row__dl" style="padding: 2px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="side-cards">
           <div class="timer-card ai" style="transition-delay:240ms">
@@ -314,22 +319,50 @@ onUnmounted(() => {
         <span class="delivery-banner__badge">Menunggu Review</span>
       </div>
       <div class="od__grid">
-        <div class="files-card ai" style="transition-delay:160ms">
-          <h3>File Hasil Kerja</h3>
-          <div v-for="f in order?.deliverables" :key="f.id" class="file-row">
-            <div class="file-row__icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <div>
+          <div class="files-card ai" style="transition-delay:160ms">
+            <h3>File Hasil Kerja</h3>
+            <div v-for="f in order?.deliverables" :key="f.id" class="file-row">
+              <div class="file-row__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="file-row__info">
+                <strong>{{ getFilename(f.fileUrl) }}</strong>
+                <span>Format: {{ getFileExtension(f.fileUrl) }} &nbsp; Pesan: {{ f.message || '-' }}</span>
+              </div>
+              <a :href="f.fileUrl" target="_blank" download class="file-row__dl" aria-label="Download">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </a>
             </div>
-            <div class="file-row__info">
-              <strong>{{ getFilename(f.fileUrl) }}</strong>
-              <span>Format: {{ getFileExtension(f.fileUrl) }} &nbsp; Pesan: {{ f.message || '-' }}</span>
+            <div v-if="!order?.deliverables?.length" class="text-gray-400 text-sm">
+              Belum ada berkas terkirim.
             </div>
-            <a :href="f.fileUrl" target="_blank" download class="file-row__dl" aria-label="Download">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </a>
           </div>
-          <div v-if="!order?.deliverables?.length" class="text-gray-400 text-sm">
-            Belum ada berkas terkirim.
+
+          <!-- Revision History Card -->
+          <div v-if="order?.revisionHistory?.length" class="files-card ai" style="margin-top: 1.5rem; transition-delay:200ms">
+            <h3>Riwayat Revisi</h3>
+            <div v-for="(rev, idx) in order.revisionHistory" :key="idx" class="revision-log-row" style="border-left: 3px solid #DC2626; padding-left: 1rem; margin-bottom: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #DC2626;">{{ rev.label }}</span>
+                <span style="font-size: 0.75rem; color: #9CA3AF;">{{ rev.time }}</span>
+              </div>
+              <p style="font-size: 0.875rem; color: #374151; margin: 0 0 0.5rem 0;">{{ rev.message }}</p>
+              <div v-if="rev.attachments && rev.attachments.length" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 600; color: #4B5563;">File Referensi:</span>
+                <div v-for="att in rev.attachments" :key="att" class="file-row" style="padding: 0.5rem; margin-bottom: 0.5rem;">
+                  <div class="file-row__icon" style="width: 28px; height: 28px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div class="file-row__info">
+                    <strong style="font-size: 0.75rem;">{{ getFilename(att) }}</strong>
+                  </div>
+                  <a :href="att" target="_blank" download class="file-row__dl" style="padding: 2px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="shipment-card ai" style="transition-delay:240ms">
@@ -385,6 +418,24 @@ onUnmounted(() => {
               <p class="text-sm text-gray-700 italic">"{{ reviewText || 'Tidak ada komentar ulasan.' }}"</p>
             </template>
           </div>
+
+          <!-- Files Card (Deliverables) in Completed View -->
+          <div v-if="order?.deliverables?.length" class="files-card ai" style="transition-delay:200ms">
+            <h3>File Hasil Kerja</h3>
+            <div v-for="f in order?.deliverables" :key="f.id" class="file-row">
+              <div class="file-row__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="file-row__info">
+                <strong>{{ getFilename(f.fileUrl) }}</strong>
+                <span>Format: {{ getFileExtension(f.fileUrl) }} &nbsp; Pesan: {{ f.message || '-' }}</span>
+              </div>
+              <a :href="f.fileUrl" target="_blank" download class="file-row__dl" aria-label="Download">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </a>
+            </div>
+          </div>
+
           <div class="tip-card ai" style="transition-delay:240ms">
             <h3>🎉 Beri Tip</h3>
             <p>Berikan apresiasi atas layanan yang luar biasa dengan menambahkan tip untuk tim vendor.</p>

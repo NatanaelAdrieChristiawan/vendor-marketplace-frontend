@@ -151,13 +151,19 @@ const compareTable = computed(() => {
   ]
 })
 
-const reviews = [
-  { name: 'Andi Pratama', rating: 5, date: '2 minggu yang lalu', text: 'Respon sangat cepat dan revisi dilakukan dengan teliti.' },
-  { name: 'Budi Santoso', rating: 4.8, date: '1 bulan yang lalu', text: 'Hasil desain sangat profesional dan sesuai dengan branding perusahaan.' }
-]
+const reviews = ref<any[]>([])
+
+async function fetchReviews() {
+  try {
+    const res = await api.get(`/reviews?gigId=${productId}`)
+    reviews.value = Array.isArray(res.data) ? res.data : res.data.data || []
+  } catch (err) {
+    reviews.value = []
+  }
+}
 
 onMounted(async () => {
-  await fetchGigDetail()
+  await Promise.all([fetchGigDetail(), fetchReviews()])
 
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target) } })

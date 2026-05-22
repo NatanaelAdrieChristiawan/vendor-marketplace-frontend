@@ -1,73 +1,19 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRefunds } from '../../composables/useRefunds'
 
 const activeTab = ref('Semua Permintaan')
 const tabs = ['Semua Permintaan', 'Tertunda', 'Diproses', 'Selesai']
 
-const requests = ref([
-  {
-    id: 1,
-    nama: 'Buyer A',
-    status: 'Menunggu',
-    jumlah: 'Rp150.000',
-    tanggal: '24 Maret 2026, 10:45 AM',
-    pesananAsli: 'Oct 20, 2026',
-    metode: 'Virtual Account',
-    bank: 'Bank Central Asia (BCA)',
-    bankShort: 'Bank BCA',
-    norek: '8830214459',
-    atasNama: 'Buyer A Name',
-    catatan: 'Mohon segera diproses untuk pengembalian dana transaksi yang gagal. Terima kasih atas bantuannya.'
-  },
-  {
-    id: 2,
-    nama: 'Buyer B',
-    status: 'Disetujui',
-    jumlah: 'Rp345.000',
-    tanggal: '23 Maret 2026, 14:20 PM',
-    pesananAsli: 'Oct 19, 2026',
-    metode: 'Credit Card',
-    bank: 'Bank Mandiri',
-    bankShort: 'Bank Mandiri',
-    norek: '1234567890',
-    atasNama: 'Buyer B Name',
-    catatan: 'Barang tidak sesuai pesanan (sengketa disetujui).'
-  },
-  {
-    id: 3,
-    nama: 'Buyer C',
-    status: 'Menunggu',
-    jumlah: 'Rp2.100.000',
-    tanggal: '22 Maret 2026, 09:15 AM',
-    pesananAsli: 'Oct 18, 2026',
-    metode: 'Manual Transfer',
-    bank: 'Bank Rakyat Indonesia (BRI)',
-    bankShort: 'Bank BRI',
-    norek: '0987654321',
-    atasNama: 'Buyer C Name',
-    catatan: 'Pesanan dibatalkan oleh sistem karena stok habis.'
-  },
-  {
-    id: 4,
-    nama: 'Buyer D',
-    status: 'Ditolak',
-    jumlah: 'Rp50.000',
-    tanggal: '21 Maret 2026, 16:30 PM',
-    pesananAsli: 'Oct 17, 2026',
-    metode: 'E-Wallet',
-    bank: 'GoPay',
-    bankShort: 'GoPay',
-    norek: '081234567890',
-    atasNama: 'Buyer D Name',
-    catatan: 'Pengajuan tidak valid.'
-  },
-])
+const { refundsQuery, processRefundMutation } = useRefunds()
+
+const allRequests = computed(() => refundsQuery.data.value || [])
 
 const filteredRequests = computed(() => {
-  if (activeTab.value === 'Semua Permintaan') return requests.value
-  if (activeTab.value === 'Tertunda') return requests.value.filter(r => r.status === 'Menunggu')
-  if (activeTab.value === 'Diproses') return requests.value.filter(r => r.status === 'Disetujui') // assuming diproses = disetujui to transfer
-  return requests.value.filter(r => r.status === activeTab.value)
+  if (activeTab.value === 'Semua Permintaan') return allRequests.value
+  if (activeTab.value === 'Tertunda') return allRequests.value.filter((r: any) => r.status === 'PENDING' || r.status === 'Menunggu')
+  if (activeTab.value === 'Diproses') return allRequests.value.filter((r: any) => r.status === 'PROCESSING' || r.status === 'Diproses')
+  return allRequests.value.filter((r: any) => r.status === 'COMPLETED' || r.status === 'Selesai')
 })
 
 const currentView = ref<'list' | 'detail' | 'success'>('list')
@@ -85,18 +31,16 @@ function goBack() {
   selectedMethod.value = 'manual'
 }
 
-function processTransfer() {
+async function processTransfer() {
+  if (!selectedRequest.value) return
+  await processRefundMutation.mutateAsync({
+    disputeId: selectedRequest.value.id,
+    method: selectedMethod.value
+  })
   currentView.value = 'success'
 }
 
 function finishProcess() {
-  if (selectedRequest.value) {
-    const idx = requests.value.findIndex(r => r.id === selectedRequest.value.id)
-    if (idx !== -1) {
-      const req = requests.value[idx]
-      if (req) req.status = 'Selesai'
-    }
-  }
   goBack()
 }
 
@@ -163,7 +107,7 @@ function getStatusDotClass(status: string) {
             <tbody class="divide-y divide-gray-100">
               <tr v-for="req in filteredRequests" :key="req.id" class="hover:bg-gray-50/50 transition-colors">
                 <td class="px-6 py-5">
-                  <span class="text-sm font-bold text-gray-900">{{ req.nama }}</span>
+                  <span class="text-sm font-bold text-gray-900">{{ req.client?.fullName || req.nama || '-' }}</span>
                 </td>
                 <td class="px-6 py-5">
                   <span :class="getStatusClass(req.status)" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold">
@@ -172,10 +116,10 @@ function getStatusDotClass(status: string) {
                   </span>
                 </td>
                 <td class="px-6 py-5">
-                  <span class="text-sm font-medium text-gray-700">{{ req.jumlah }}</span>
+                  <span class="text-sm font-medium text-gray-700">{{ req.amount ? 'Rp ' + Number(req.amount).toLocaleString('id-ID') : req.jumlah || '-' }}</span>
                 </td>
                 <td class="px-6 py-5">
-                  <span class="text-sm text-gray-600">{{ req.tanggal }}</span>
+                  <span class="text-sm text-gray-600">{{ req.createdAt ? new Date(req.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : req.tanggal || '-' }}</span>
                 </td>
                 <td class="px-6 py-5">
                   <div class="flex items-center justify-center">
@@ -237,11 +181,11 @@ function getStatusDotClass(status: string) {
             <div class="p-6 flex items-start justify-between border-b border-gray-100">
               <div>
                 <p class="text-sm font-medium text-gray-500 mb-1">Jumlah Pengembalian</p>
-                <h2 class="text-3xl font-bold text-[#2A437E]">{{ selectedRequest.jumlah }}</h2>
+                <h2 class="text-3xl font-bold text-[#2A437E]">{{ selectedRequest.amount ? 'Rp ' + Number(selectedRequest.amount).toLocaleString('id-ID') : selectedRequest.jumlah }}</h2>
               </div>
               <div class="text-right">
                 <p class="text-sm font-medium text-gray-500 mb-1">Customer</p>
-                <p class="font-bold text-gray-900">{{ selectedRequest.nama }}</p>
+                <p class="font-bold text-gray-900">{{ selectedRequest.client?.fullName || selectedRequest.nama || '-' }}</p>
               </div>
             </div>
             
@@ -255,11 +199,11 @@ function getStatusDotClass(status: string) {
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-500">Pesanan Asli</span>
-                  <span class="font-bold text-gray-900">{{ selectedRequest.pesananAsli }}</span>
+                  <span class="font-bold text-gray-900">{{ selectedRequest.order?.id ? '#ORD-' + selectedRequest.order.id : selectedRequest.pesananAsli || '-' }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-500">Metode Pembayaran</span>
-                  <span class="font-bold text-gray-900">{{ selectedRequest.metode }}</span>
+                  <span class="font-bold text-gray-900">{{ selectedRequest.order?.paymentMethod || selectedRequest.metode || '-' }}</span>
                 </div>
               </div>
 
@@ -268,15 +212,15 @@ function getStatusDotClass(status: string) {
                 <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">DETAIL BANK PENERIMA</h3>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-500">Nama Bank</span>
-                  <span class="font-bold text-gray-900">{{ selectedRequest.bank }}</span>
+                  <span class="font-bold text-gray-900">{{ selectedRequest.merchant?.bankName || selectedRequest.bank || '-' }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-500">Nomor Rekening</span>
-                  <span class="font-bold text-gray-900">{{ selectedRequest.norek }}</span>
+                  <span class="font-bold text-gray-900">{{ selectedRequest.merchant?.bankAccountNumber || selectedRequest.norek || '-' }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-500">Atas Nama</span>
-                  <span class="font-bold text-gray-900">{{ selectedRequest.atasNama }}</span>
+                  <span class="font-bold text-gray-900">{{ selectedRequest.merchant?.bankAccountName || selectedRequest.atasNama || '-' }}</span>
                 </div>
               </div>
             </div>

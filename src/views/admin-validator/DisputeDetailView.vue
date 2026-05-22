@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAdmin } from '../../composables/useAdmin'
 
 const router = useRouter()
 const route = useRoute()
-const { pendingDisputesQuery, resolveDisputeMutation } = useAdmin()
+const { pendingDisputesQuery, submitVerdictMutation, confirmVerdictMutation } = useAdmin()
 
 const disputeId = Number(route.params.id)
+const disputeData = ref<any>(null)
 
-const dispute = computed(() => {
-  return pendingDisputesQuery.data.value?.find((d: any) => d.id === disputeId)
-})
+watch(
+  () => pendingDisputesQuery.data.value,
+  (list) => {
+    if (list && !disputeData.value) {
+      const found = list.find((d: any) => d.id === disputeId)
+      if (found) {
+        disputeData.value = { ...found }
+      }
+    }
+  },
+  { immediate: true }
+)
 
-const displayId = computed(() => `#DS-${disputeId.toString().padStart(5, '0')}`)
+const displayId = `#DS-${disputeId.toString().padStart(5, '0')}`
 
-// Modal state
 const showConfirmModal = ref(false)
 const confirmAction = ref<'approve' | 'reject' | null>(null)
 
@@ -38,20 +47,28 @@ async function submitDecision() {
 
   const decision = confirmAction.value === 'approve' ? 'APPROVE_REFUND' : 'REJECT_COMPLAINT'
   
-  await resolveDisputeMutation.mutateAsync({
+  await submitVerdictMutation.mutateAsync({
     id: disputeId,
     decision
   })
   
+  if (disputeData.value) {
+    disputeData.value.status = 'UNDER_REVIEW'
+    disputeData.value.pendingVerdict = decision
+  }
+  
   closeConfirmModal()
+}
+
+async function handleConfirmVerdict() {
+  await confirmVerdictMutation.mutateAsync(disputeId)
   goBack()
 }
 </script>
 
 <template>
-  <div v-if="dispute" class="space-y-6 animate-fade-in w-full pb-20 max-w-[800px] mx-auto">
+  <div v-if="disputeData" class="space-y-6 animate-fade-in w-full pb-20 max-w-[800px] mx-auto">
     
-    <!-- Header with Back Button -->
     <div class="flex items-center gap-4">
       <button @click="goBack" class="p-2 -ml-2 rounded-xl hover:bg-gray-100 text-gray-800 transition-colors">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
@@ -59,46 +76,47 @@ async function submitDecision() {
       <h1 class="text-xl font-bold">Detail Sengketa</h1>
     </div>
 
-    <!-- Title and Status Badge -->
     <div class="flex items-center gap-4">
       <h2 class="text-3xl font-extrabold text-[#0B152A]">{{ displayId }}</h2>
-      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-yellow-100 bg-yellow-50 text-xs font-bold text-yellow-600">
+      <div v-if="disputeData.status === 'UNDER_REVIEW'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-orange-100 bg-orange-50 text-xs font-bold text-orange-600">
+        <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+        Under Review (Perlu Konfirmasi)
+      </div>
+      <div v-else class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-yellow-100 bg-yellow-50 text-xs font-bold text-yellow-600">
         <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
         Menunggu Keputusan
       </div>
     </div>
 
-    <!-- Ringkasan Kasus -->
     <div class="bg-white rounded-[20px] p-8 border border-gray-100 shadow-sm">
       <h3 class="font-extrabold text-[#1E3A8A] text-lg mb-8">Informasi Pesanan</h3>
       
       <div class="space-y-6">
         <div class="flex justify-between items-center border-b border-gray-100 pb-4">
           <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">GIG / LAYANAN</span>
-          <span class="text-sm font-bold text-gray-800">{{ dispute.order?.gig?.title || 'Pesanan Langsung' }}</span>
+          <span class="text-sm font-bold text-gray-800">{{ disputeData.order?.gig?.title || 'Pesanan Langsung' }}</span>
         </div>
 
         <div class="flex justify-between items-center border-b border-gray-100 pb-4">
           <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">KLIEN</span>
-          <span class="text-sm font-medium text-gray-800">{{ dispute.order?.client?.fullName }} ({{ dispute.order?.client?.email }})</span>
+          <span class="text-sm font-medium text-gray-800">{{ disputeData.order?.client?.fullName }} ({{ disputeData.order?.client?.email }})</span>
         </div>
         
         <div class="flex justify-between items-center border-b border-gray-100 pb-4">
           <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">TOTAL PESANAN</span>
-          <span class="text-base font-bold text-[#1E3A8A]">Rp {{ Number(dispute.order?.totalAmount).toLocaleString() }}</span>
+          <span class="text-base font-bold text-[#1E3A8A]">Rp {{ Number(disputeData.order?.totalAmount).toLocaleString() }}</span>
         </div>
         
         <div class="pt-2">
           <span class="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">ALASAN SENGKETA</span>
           <p class="text-sm font-medium text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">
-            {{ dispute.reason }}
+            {{ disputeData.reason }}
           </p>
         </div>
       </div>
     </div>
 
-    <!-- Bukti Section -->
-    <div v-if="dispute.evidenceUrls" class="bg-[#F8F9FA] rounded-[20px] p-8 border border-gray-100">
+    <div v-if="disputeData.evidenceUrls" class="bg-[#F8F9FA] rounded-[20px] p-8 border border-gray-100">
       <h3 class="font-extrabold text-[#0B152A] text-lg mb-6">Bukti Pendukung</h3>
       
       <div class="grid grid-cols-1 gap-4">
@@ -109,37 +127,56 @@ async function submitDecision() {
             </div>
             <div>
               <h4 class="font-bold text-gray-900 text-sm">File Bukti</h4>
-              <p class="text-[11px] text-gray-500 mt-0.5 truncate max-w-[200px]">{{ dispute.evidenceUrls }}</p>
+              <p class="text-[11px] text-gray-500 mt-0.5 truncate max-w-[200px]">{{ disputeData.evidenceUrls }}</p>
             </div>
           </div>
-          <a :href="dispute.evidenceUrls" target="_blank" class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
+          <a :href="disputeData.evidenceUrls" target="_blank" class="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
           </a>
         </div>
       </div>
     </div>
 
-    <!-- Bottom Actions -->
-    <div class="flex flex-col items-end gap-3 pt-6">
+    <div v-if="disputeData.status === 'UNDER_REVIEW'" class="space-y-4 pt-6">
+      <div class="p-4 bg-orange-50 border border-orange-200 rounded-xl text-orange-800 text-sm font-medium text-center">
+        Verdict telah disiapkan: {{ disputeData.pendingVerdict === 'APPROVE_REFUND' ? 'Setujui Pengembalian Dana' : 'Tolak Keluhan' }}. Silakan konfirmasi untuk mengeksekusi.
+      </div>
+      <div class="flex justify-end gap-3">
+        <button 
+          @click="disputeData.status = 'OPEN'"
+          class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm"
+        >
+          Ubah Verdict
+        </button>
+        <button 
+          @click="handleConfirmVerdict" 
+          :disabled="confirmVerdictMutation.isPending.value"
+          class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm min-w-[200px]"
+          style="background-color: #1E3A8A;"
+        >
+          {{ confirmVerdictMutation.isPending.value ? 'Mengonfirmasi...' : 'Konfirmasi & Eksekusi' }}
+        </button>
+      </div>
+    </div>
+    <div v-else class="flex flex-col items-end gap-3 pt-6">
       <button 
         @click="handleAction('approve')" 
-        :disabled="resolveDisputeMutation.isPending.value"
+        :disabled="submitVerdictMutation.isPending.value"
         class="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm w-auto min-w-[280px]"
         style="background-color: #16A34A;"
       >
-        {{ resolveDisputeMutation.isPending.value ? 'Memproses...' : 'Setujui Pengembalian Dana (Refund)' }}
+        {{ submitVerdictMutation.isPending.value ? 'Memproses...' : 'Setujui Pengembalian Dana (Refund)' }}
       </button>
       <button 
         @click="handleAction('reject')" 
-        :disabled="resolveDisputeMutation.isPending.value"
+        :disabled="submitVerdictMutation.isPending.value"
         class="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-extrabold py-3.5 px-8 rounded-xl uppercase tracking-wide text-sm transition-colors shadow-sm w-auto min-w-[280px]"
         style="background-color: #DC2626;"
       >
-        {{ resolveDisputeMutation.isPending.value ? 'Memproses...' : 'Tolak Keluhan (Lepaskan Dana)' }}
+        {{ submitVerdictMutation.isPending.value ? 'Memproses...' : 'Tolak Keluhan (Lepaskan Dana)' }}
       </button>
     </div>
 
-    <!-- Confirmation Modal -->
     <div v-if="showConfirmModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 animate-fade-in">
       <div class="absolute inset-0" @click="closeConfirmModal"></div>
       <div class="relative w-full max-w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in p-8 text-center">
@@ -148,15 +185,15 @@ async function submitDecision() {
         </div>
         <h3 class="text-xl font-extrabold text-gray-900 mb-2">Konfirmasi Putusan</h3>
         <p class="text-sm text-gray-500 mb-8">
-          Apakah Anda yakin ingin <strong>{{ confirmAction === 'approve' ? 'menyetujui pengembalian dana (Refund)' : 'menolak keluhan (Lanjutkan Pembayaran)' }}</strong> untuk sengketa ini? Keputusan ini tidak dapat dibatalkan.
+          Apakah Anda yakin ingin <strong>{{ confirmAction === 'approve' ? 'menyetujui pengembalian dana (Refund)' : 'menolak keluhan (Lanjutkan Pembayaran)' }}</strong> untuk sengketa ini? Keputusan ini perlu dikonfirmasi lagi pada tahap berikutnya.
         </p>
         
         <div class="flex gap-3 w-full">
           <button @click="closeConfirmModal" class="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors">
             Batal
           </button>
-          <button @click="submitDecision" :disabled="resolveDisputeMutation.isPending.value" class="flex-1 py-3 px-4 bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 text-white font-bold rounded-xl transition-colors">
-            {{ resolveDisputeMutation.isPending.value ? 'Memproses...' : 'Ya, Lanjutkan' }}
+          <button @click="submitDecision" :disabled="submitVerdictMutation.isPending.value" class="flex-1 py-3 px-4 bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 text-white font-bold rounded-xl transition-colors">
+            {{ submitVerdictMutation.isPending.value ? 'Memproses...' : 'Ya, Lanjutkan' }}
           </button>
         </div>
       </div>
@@ -186,3 +223,4 @@ async function submitDecision() {
   to { opacity: 1; transform: scale(1); }
 }
 </style>
+
