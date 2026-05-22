@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuth } from '../../composables/useAuth'
 
 const route = useRoute()
 const router = useRouter()
-const orderId = route.params.id
+const orderId = route.params.id as string
+
+const { uploadFile } = useAuth()
 
 const revisionText = ref('')
 const isDragging = ref(false)
+const isUploading = ref(false)
+const rawFiles = ref<File[]>([])
 const uploadedFiles = ref<{ name: string; size: string }[]>([])
 
 function goBack() { router.push(`/pesanan/${orderId}`) }
@@ -18,6 +23,7 @@ function handleDrop(e: DragEvent) {
   e.preventDefault(); isDragging.value = false
   if (e.dataTransfer?.files) {
     Array.from(e.dataTransfer.files).forEach(f => {
+      rawFiles.value.push(f)
       uploadedFiles.value.push({ name: f.name, size: (f.size / 1024 / 1024).toFixed(1) + ' MB' })
     })
   }
@@ -29,13 +35,73 @@ function triggerUpload() {
   input.onchange = (e: Event) => {
     const files = (e.target as HTMLInputElement).files
     if (files) Array.from(files).forEach(f => {
+      rawFiles.value.push(f)
       uploadedFiles.value.push({ name: f.name, size: (f.size / 1024 / 1024).toFixed(1) + ' MB' })
     })
   }
   input.click()
 }
-function removeFile(idx: number) { uploadedFiles.value.splice(idx, 1) }
-function submitRevision() { router.push(`/pesanan/${orderId}`) }
+function removeFile(idx: number) {
+  uploadedFiles.value.splice(idx, 1)
+  rawFiles.value.splice(idx, 1)
+}
+
+function getFilename(url: string) {
+  if (!url) return ''
+  try {
+    const parts = url.split('/')
+    const last = parts[parts.length - 1]
+    if (!last) return 'revision_attachment'
+    return decodeURIComponent(last.split('?')[0] || '')
+  } catch (e) {
+    return 'revision_attachment'
+  }
+}
+
+async function submitRevision() {
+  if (!revisionText.value.trim()) {
+    alert('Umpan balik revisi tidak boleh kosong.')
+    return
+  }
+  
+  isUploading.value = true
+  try {
+    const fileUrls: string[] = []
+    for (const file of rawFiles.value) {
+      const uploadRes = await uploadFile(file, 'merchant-assets')
+      const fileUrl = uploadRes.url || uploadRes.data?.url
+      if (fileUrl) {
+        fileUrls.push(fileUrl)
+      }
+    }
+    
+    // Save to revision history local storage
+    const revisionEntry = {
+      type: 'revision_requested',
+      label: 'REVISI DIMINTA',
+      time: new Date().toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', year: 'numeric' }),
+      message: `"${revisionText.value}"`,
+      attachment: fileUrls.length > 0 && fileUrls[0] ? getFilename(fileUrls[0]) : null,
+      attachments: fileUrls
+    }
+    
+    const historyKey = `order_revision_history_${orderId}`
+    const existing = JSON.parse(localStorage.getItem(historyKey) || '[]')
+    existing.unshift(revisionEntry)
+    localStorage.setItem(historyKey, JSON.stringify(existing))
+    
+    // Set status override
+    localStorage.setItem(`order_status_override_${orderId}`, 'IN_REVISION')
+    
+    alert('Permintaan revisi berhasil dikirim!')
+    router.push(`/pesanan/${orderId}`)
+  } catch (err: any) {
+    console.error('Failed to submit revision', err)
+    alert('Gagal mengirim permintaan revisi. Silakan coba lagi.')
+  } finally {
+    isUploading.value = false
+  }
+}
 
 onMounted(() => {
   const obs = new IntersectionObserver((entries) => {
@@ -82,7 +148,9 @@ onMounted(() => {
   </div>
 
   <div class="rev__submit ai" style="transition-delay:320ms">
-    <button class="btn-send-revision" @click="submitRevision">Kirim Permintaan Revisi</button>
+    <button class="btn-send-revision" :disabled="isUploading" @click="submitRevision">
+      {{ isUploading ? 'Mengirim...' : 'Kirim Permintaan Revisi' }}
+    </button>
   </div>
 </div>
 </div>

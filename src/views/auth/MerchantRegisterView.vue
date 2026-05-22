@@ -5,7 +5,7 @@ import { useAuth } from '../../composables/useAuth'
 import { useRegistrationStore } from '../../store/registration.store'
 
 const router = useRouter()
-const { registerMerchantMutation } = useAuth()
+const { registerMerchantMutation, uploadFile, submitKybMutation } = useAuth()
 const registrationStore = useRegistrationStore()
 
 const currentStep = ref(1)
@@ -26,6 +26,9 @@ const logoPreview = ref('')
 const bannerPreview = ref('')
 const kybPreview = ref('')
 const descCount = computed(() => form.description.length)
+
+const isSubmitting = ref(false)
+const errorMessage = ref('')
 
 function handleFile(type: 'logo' | 'banner' | 'kyb', e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0]
@@ -52,35 +55,66 @@ function nextStep() {
 
 async function handleSubmit() {
   if (!form.storeName || !form.description) return
+  isSubmitting.value = true
+  errorMessage.value = ''
 
-  const logoUrl = form.logoFile ? await fileToDataUrl(form.logoFile) : ''
-  const bannerUrl = form.bannerFile ? await fileToDataUrl(form.bannerFile) : ''
-
-  registerMerchantMutation.mutate({
-    email: registrationStore.email,
-    password: registrationStore.password,
-    fullName: registrationStore.username,
-    shopName: form.storeName,
-    description: form.description,
-    logoUrl: logoUrl || 'https://placehold.co/200x200?text=Logo',
-    bannerUrl: bannerUrl || 'https://placehold.co/1200x400?text=Banner',
-    bankName: form.bankName,
-    accountNumber: form.bankAccount,
-    accountHolderName: form.bankHolder
-  }, {
-    onSuccess: () => {
-      registrationStore.reset()
-      router.push('/vendor/dashboard')
+  try {
+    let logoUrl = ''
+    if (form.logoFile) {
+      const res = await uploadFile(form.logoFile)
+      logoUrl = res.url
     }
-  })
-}
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = (e) => resolve(e.target?.result as string)
-    reader.readAsDataURL(file)
-  })
+    let bannerUrl = ''
+    if (form.bannerFile) {
+      const res = await uploadFile(form.bannerFile)
+      bannerUrl = res.url
+    }
+
+    registerMerchantMutation.mutate({
+      email: registrationStore.email,
+      password: registrationStore.password,
+      fullName: registrationStore.username,
+      shopName: form.storeName,
+      description: form.description,
+      logoUrl: logoUrl || 'https://placehold.co/200x200?text=Logo',
+      bannerUrl: bannerUrl || 'https://placehold.co/1200x400?text=Banner',
+      bankName: form.bankName,
+      accountNumber: form.bankAccount,
+      accountHolderName: form.bankHolder
+    }, {
+      onSuccess: async () => {
+        try {
+          if (form.kybFile) {
+            const kybRes = await uploadFile(form.kybFile, 'merchant-assets')
+            const kybUrl = kybRes.url
+            await submitKybMutation.mutateAsync({
+              kybDocumentUrl: kybUrl,
+              portfolioUrl: form.portfolioLink || ''
+            })
+          }
+          registrationStore.reset()
+          router.push('/vendor/dashboard')
+        } catch (err: any) {
+          console.error('Error submitting KYB document:', err)
+          // Even if KYB submission fails, the merchant was successfully registered and logged in,
+          // so redirecting to the dashboard is appropriate. They can retry there.
+          registrationStore.reset()
+          router.push('/vendor/dashboard')
+        } finally {
+          isSubmitting.value = false
+        }
+      },
+      onError: (err: any) => {
+        errorMessage.value = err?.response?.data?.message || 'Terjadi kesalahan saat mendaftar.'
+        isSubmitting.value = false
+      }
+    })
+  } catch (err: any) {
+    console.error('Error uploading image assets:', err)
+    errorMessage.value = err?.response?.data?.message || 'Gagal mengunggah logo atau banner.'
+    isSubmitting.value = false
+  }
 }
 </script>
 
@@ -208,14 +242,14 @@ function fileToDataUrl(file: File): Promise<string> {
         <input v-model="form.portfolioLink" class="mr-input" placeholder="https://behance.net/username" />
       </section>
 
-      <button class="mr-btn" :disabled="registerMerchantMutation.isPending.value" @click="handleSubmit">
-        <svg v-if="registerMerchantMutation.isPending.value" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
-        {{ registerMerchantMutation.isPending.value ? 'Memproses...' : 'Submit for Review' }}
-        <svg v-if="!registerMerchantMutation.isPending.value" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <button class="mr-btn" :disabled="isSubmitting" @click="handleSubmit">
+        <svg v-if="isSubmitting" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 019.95 9"/></svg>
+        {{ isSubmitting ? 'Memproses...' : 'Submit for Review' }}
+        <svg v-if="!isSubmitting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </button>
       
-      <p v-if="registerMerchantMutation.isError.value" class="mr-error">
-        {{ (registerMerchantMutation.error.value as any)?.response?.data?.message || 'Terjadi kesalahan saat mendaftar.' }}
+      <p v-if="errorMessage" class="mr-error">
+        {{ errorMessage }}
       </p>
 
       <p class="mr-terms">Dengan mengklik "Submit for Review", Anda menyetujui <a href="#">Syarat & Ketentuan Vendor</a> serta kebijakan privasi VendorFlow.</p>

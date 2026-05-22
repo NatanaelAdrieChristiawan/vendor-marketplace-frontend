@@ -71,16 +71,6 @@ function selectRole(r: 'CLIENT' | 'MERCHANT') {
   form.role = r
 }
 
-function handleFile(type: 'logo' | 'banner', e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0]
-  if (!f) return
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    if (type === 'logo') form.logoUrl = ev.target?.result as string
-    if (type === 'banner') form.bannerUrl = ev.target?.result as string
-  }
-  reader.readAsDataURL(f)
-}
 
 function handleFinish() {
   if (!form.role) return

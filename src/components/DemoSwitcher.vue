@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useAuthStore } from '../store/auth.store'
-import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 
-const authStore = useAuthStore()
-const router = useRouter()
 const { loginMutation } = useAuth()
 const isOpen = ref(false)
 

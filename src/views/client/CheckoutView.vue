@@ -1,26 +1,36 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import api from '../../api/axios'
 
 const route = useRoute()
 const router = useRouter()
 const productId = route.params.id
 
-// Simulated product data
-const product = ref({
-  title: 'Desain UI/UX Landing Page Bisnis (3 Halaman)',
-  deliveryDays: 3,
-  subtotal: 1750000,
-  serviceFee: 25000,
+// Query params from OrderConfirmation
+const planName = computed(() => {
+  const p = route.query.plan as string || 'standard'
+  return p.charAt(0).toUpperCase() + p.slice(1)
 })
+const chosenPrice = computed(() => {
+  return parseFloat(route.query.price as string || '0')
+})
+const notes = computed(() => route.query.notes as string || '')
+const files = computed(() => route.query.files as string || '')
 
-const totalPrice = computed(() => product.value.subtotal + product.value.serviceFee)
+const gig = ref<any>(null)
+const isLoading = ref(true)
+const isProcessing = ref(false)
+
+// Simulated fees
+const serviceFee = 25000
+const totalPrice = computed(() => chosenPrice.value + serviceFee)
 
 // Payment method
-type PaymentMethod = 'va' | 'qris'
+type PaymentMethod = 'va' | 'qris' | 'manual'
 const selectedPayment = ref<PaymentMethod>('va')
 
-// VA Banks
+// VA Banks for Midtrans representation
 const selectedBank = ref('bca')
 const banks = [
   { id: 'bca', name: 'BCA', logo: '🏦' },
@@ -32,29 +42,105 @@ const banks = [
 // QRIS Wallets
 const qrisWallets = ['GoPay', 'OVO', 'Dana', 'ShopeePay', 'LinkAja']
 
-const isProcessing = ref(false)
-
 function formatPrice(val: number) {
   return 'Rp ' + val.toLocaleString('id-ID')
 }
 
-function processPayment() {
+// Load Midtrans snap.js dynamically
+function loadSnapScript(clientKey: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).snap) {
+      resolve((window as any).snap)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://app.sandbox.midtrans.com/snap/snap.js'
+    script.setAttribute('data-client-key', clientKey)
+    script.onload = () => resolve((window as any).snap)
+    script.onerror = (err) => reject(err)
+    document.head.appendChild(script)
+  })
+}
+
+async function fetchGigDetails() {
+  try {
+    isLoading.value = true
+    const res = await api.get(`/gigs/details/${productId}`)
+    gig.value = res.data
+  } catch (err) {
+    console.error('Failed to load gig details', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function processPayment() {
+  if (isProcessing.value) return
   isProcessing.value = true
-  // Simulate payment processing
-  setTimeout(() => {
+
+  try {
+    // 1. Create order in Backend
+    const orderRes = await api.post('/orders', { gigId: Number(productId) })
+    const orderId = orderRes.data.id
+
+    // 2. Create chat channel
+    try {
+      await api.post('/chat/create-channel', { gigId: Number(productId) })
+    } catch (chatErr) {
+      console.warn('Failed to auto-create Stream Chat channel', chatErr)
+    }
+
+    // 3. Save automated chat message to localStorage for mockup chat UI
+    const automatedMsg = {
+      orderId: `#ORD-${orderId}`,
+      gigId: productId,
+      plan: planName.value,
+      price: chosenPrice.value,
+      notes: notes.value || 'Tidak ada catatan.',
+      files: files.value,
+      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    }
+    const existingMsgs = JSON.parse(localStorage.getItem('automated_chat_messages') || '[]')
+    existingMsgs.push(automatedMsg)
+    localStorage.setItem('automated_chat_messages', JSON.stringify(existingMsgs))
+
+    // 4. Handle based on payment method
+    if (selectedPayment.value === 'manual') {
+      // Direct redirect to manual verification
+      router.push(`/jelajahi/${productId}/verifikasi?orderId=${orderId}&method=manual`)
+    } else {
+      // Midtrans Snap flow
+      const initPaymentRes = await api.post(`/orders/${orderId}/initiate-payment`)
+      const { snapToken, clientKey } = initPaymentRes.data
+
+      const snap = await loadSnapScript(clientKey)
+      snap.pay(snapToken, {
+        onSuccess: (_result: any) => {
+          router.push(`/jelajahi/${productId}/verifikasi?orderId=${orderId}&status=success`)
+        },
+        onPending: (_result: any) => {
+          router.push(`/jelajahi/${productId}/verifikasi?orderId=${orderId}&status=pending`)
+        },
+        onError: (_result: any) => {
+          alert('Pembayaran Midtrans gagal atau dibatalkan.')
+          isProcessing.value = false
+        },
+        onClose: () => {
+          console.log('Customer closed payment popup')
+          isProcessing.value = false
+        }
+      })
+    }
+  } catch (err: any) {
+    console.error('Checkout failed', err)
+    alert(err.response?.data?.message || 'Terjadi kesalahan saat memproses checkout.')
     isProcessing.value = false
-    router.push({
-      name: 'PaymentVerification',
-      params: { id: productId as string },
-    })
-  }, 1500)
+  }
 }
 
-function goBack() {
-  router.back()
-}
+onMounted(async () => {
+  await fetchGigDetails()
 
-onMounted(() => {
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('vis'); observer.unobserve(e.target) } })
   }, { threshold: 0.08 })
@@ -71,13 +157,19 @@ onMounted(() => {
       <nav class="stepper" aria-label="Order steps">
         <router-link :to="{ name: 'OrderConfirmation', params: { id: productId } }" class="stepper__step stepper__step--done">Detail Pesanan</router-link>
         <span class="stepper__divider">/</span>
-        <span class="stepper__step stepper__step--active">Detail Pesanan</span>
+        <span class="stepper__step stepper__step--active">Pembayaran</span>
         <span class="stepper__divider">/</span>
         <span class="stepper__step">Verifikasi</span>
       </nav>
     </div>
 
-    <div class="co__grid">
+    <!-- Loading State -->
+    <div v-if="isLoading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Memuat konfigurasi checkout...</p>
+    </div>
+
+    <div v-else class="co__grid">
       <!-- Left Column: Payment Methods -->
       <div class="co__left">
         <section class="co__section ai" style="transition-delay:100ms">
@@ -93,7 +185,7 @@ onMounted(() => {
               <div class="payment-tab__icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
               </div>
-              Virtual Account
+              Midtrans VA
             </button>
             <button
               class="payment-tab"
@@ -103,13 +195,23 @@ onMounted(() => {
               <div class="payment-tab__icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
               </div>
-              QRIS (Gopay/OVO/Dana)
+              Midtrans QRIS
+            </button>
+            <button
+              class="payment-tab"
+              :class="{ 'payment-tab--active': selectedPayment === 'manual' }"
+              @click="selectedPayment = 'manual'"
+            >
+              <div class="payment-tab__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              Manual Transfer
             </button>
           </div>
 
           <!-- Virtual Account Options -->
           <div v-if="selectedPayment === 'va'" class="payment-options ai" style="transition-delay:200ms">
-            <p class="payment-options__label">Pilih Bank</p>
+            <p class="payment-options__label">Pilih Bank Virtual Account (Simulasi)</p>
             <div class="bank-grid">
               <button
                 v-for="bank in banks"
@@ -126,13 +228,13 @@ onMounted(() => {
               <div class="va-info__icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
               </div>
-              <p>Anda akan mendapatkan nomor Virtual Account setelah memproses pesanan. Transfer ke nomor VA tersebut sebelum batas waktu yang ditentukan.</p>
+              <p>Pembayaran akan diproses aman menggunakan gateway pembayaran sandbox Midtrans Snap. Dapatkan nomor virtual account resmi saat pop-up pembayaran muncul.</p>
             </div>
           </div>
 
           <!-- QRIS Options -->
           <div v-if="selectedPayment === 'qris'" class="payment-options ai" style="transition-delay:200ms">
-            <p class="payment-options__label">E-Wallet yang didukung</p>
+            <p class="payment-options__label">E-Wallet yang didukung (Simulasi)</p>
             <div class="wallet-list">
               <div v-for="w in qrisWallets" :key="w" class="wallet-item">
                 <div class="wallet-item__icon">
@@ -145,8 +247,37 @@ onMounted(() => {
               <div class="va-info__icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
               </div>
-              <p>QR Code QRIS akan ditampilkan setelah Anda memproses pesanan. Scan QR Code dengan e-wallet favorit Anda.</p>
+              <p>QR Code QRIS akan ditampilkan oleh Midtrans Snap. Anda dapat memindainya melalui e-wallet favorit Anda untuk melakukan pembayaran simulasi.</p>
             </div>
+          </div>
+
+          <!-- Manual Transfer Options -->
+          <div v-if="selectedPayment === 'manual'" class="payment-options ai" style="transition-delay:200ms">
+            <p class="payment-options__label">Informasi Rekening Platform</p>
+            <div class="va-info" style="margin-bottom: 1rem; border-color: #3B5BDB; background: #EEF2FF;">
+              <div class="va-info__icon">
+                <span style="font-size: 1.25rem;">🏦</span>
+              </div>
+              <div>
+                <strong style="color: #1E2A5E; font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">Bank Mandiri (Manual Transfer)</strong>
+                <p style="color: #374151; font-weight: 700; font-size: 1rem; margin: 0.25rem 0;">No Rekening: 157-00-1234567-9</p>
+                <p style="color: #555; margin: 0;">Atas Nama: PT Vendor Marketplace Indonesia</p>
+              </div>
+            </div>
+            <div class="va-info">
+              <div class="va-info__icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </div>
+              <p>Silakan lakukan transfer manual ke rekening bank di atas, kemudian unggah bukti transfer fisik di halaman berikutnya untuk diverifikasi oleh Finance Admin.</p>
+            </div>
+          </div>
+
+          <!-- Disclaimer standard price -->
+          <div class="disclaimer-alert ai" style="transition-delay: 250ms; margin-top: 1.5rem;">
+            <div class="disclaimer-alert__icon">⚠️</div>
+            <p class="disclaimer-alert__text">
+              <strong>Catatan Sistem:</strong> Dikarenakan sistem pencatatan backend saat ini, nominal tagihan transaksi resmi di database akan selalu dicatat menggunakan <em>harga standard</em> gig. Penyelesaian sisa pembayaran untuk paket Basic/Premium dilakukan melalui koordinasi langsung dengan vendor di luar sistem utama.
+            </p>
           </div>
         </section>
       </div>
@@ -156,19 +287,21 @@ onMounted(() => {
         <div class="summary-card ai" style="transition-delay:150ms">
           <div class="summary-card__header">Ringkasan Pesanan</div>
           <div class="summary-card__body">
-            <h4 class="summary-card__product">{{ product.title }}</h4>
-            <div class="summary-card__delivery">
+            <h4 class="summary-card__product">{{ gig?.title }}</h4>
+            <span class="summary-card__badge">{{ planName }} Plan</span>
+            
+            <div class="summary-card__delivery" style="margin-top: 0.5rem;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              Selesai dalam {{ product.deliveryDays }} Hari Kerja
+              Vendor: {{ gig?.merchant?.shopName || 'Freelancer' }}
             </div>
             <div class="summary-card__divider"></div>
             <div class="summary-card__row">
-              <span>Subtotal Jasa</span>
-              <span>{{ formatPrice(product.subtotal) }}</span>
+              <span>Subtotal Paket ({{ planName }})</span>
+              <span>{{ formatPrice(chosenPrice) }}</span>
             </div>
             <div class="summary-card__row">
               <span>Biaya Layanan</span>
-              <span>{{ formatPrice(product.serviceFee) }}</span>
+              <span>{{ formatPrice(serviceFee) }}</span>
             </div>
             <div class="summary-card__divider"></div>
             <div class="summary-card__row summary-card__row--total">
@@ -211,6 +344,10 @@ onMounted(() => {
 
 .co { padding: 1.5rem 0 4rem; min-height: 100vh; background: #FAFBFC; }
 .co__inner { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+
+.loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5rem 0; color: #6B7280; font-weight: 500; }
+.spinner { width: 40px; height: 40px; border: 4px solid #E5E7EB; border-top-color: #3B5BDB; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Header */
 .co__header { margin-bottom: 2rem; }
@@ -294,6 +431,14 @@ onMounted(() => {
 .va-info__icon { flex-shrink: 0; margin-top: 2px; }
 .va-info p { font-size: 0.8125rem; color: #64748B; line-height: 1.6; margin: 0; }
 
+/* Disclaimer Alert */
+.disclaimer-alert {
+  display: flex; gap: 0.75rem; padding: 1rem 1.25rem;
+  background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px;
+}
+.disclaimer-alert__icon { font-size: 1.25rem; flex-shrink: 0; }
+.disclaimer-alert__text { font-size: 0.8125rem; color: #78350F; line-height: 1.5; margin: 0; }
+
 /* Summary Card */
 .summary-card {
   border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB;
@@ -307,7 +452,12 @@ onMounted(() => {
 .summary-card__body { padding: 1.5rem; }
 .summary-card__product {
   font-size: 0.9375rem; font-weight: 700; color: #111827;
-  margin: 0 0 0.625rem; line-height: 1.4;
+  margin: 0 0 0.25rem; line-height: 1.4;
+}
+.summary-card__badge {
+  display: inline-block; padding: 0.125rem 0.5rem; background: #EEF2FF;
+  color: #3B5BDB; font-size: 0.7rem; font-weight: 700; border-radius: 4px;
+  text-transform: uppercase;
 }
 .summary-card__delivery {
   display: flex; align-items: center; gap: 0.375rem;
@@ -332,15 +482,6 @@ onMounted(() => {
 .summary-card__btn:hover { background: #2F4DC4; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,91,219,0.25); }
 .summary-card__btn:active { transform: translateY(0); }
 .summary-card__btn:disabled { opacity: 0.8; cursor: not-allowed; transform: none; }
-.summary-card__btn--loading { background: #4B6BE0; }
-
-/* Spinner */
-.spinner {
-  width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: #fff; border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Security Badge */
 .security-badge {
@@ -363,3 +504,5 @@ onMounted(() => {
 }
 @media (prefers-reduced-motion: reduce) { .ai { transition: none; } .spinner { animation: none; } }
 </style>
+
+

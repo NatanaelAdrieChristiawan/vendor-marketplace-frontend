@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import api from '../../api/axios'
 
 const route = useRoute()
 const router = useRouter()
-const productId = route.params.id
+const orderId = Number(route.query.orderId)
+
+const order = ref<any>(null)
+const isLoading = ref(true)
+const isUploading = ref(false)
+const selectedFile = ref<File | null>(null)
 
 // Chat widget
 const isChatOpen = ref(false)
 const chatMessage = ref('')
 const chatMessages = ref([
-  { id: 1, sender: 'vendor', name: 'Jennifer Markus', avatar: '', text: 'Hey, Did you ...', time: '04:45 PM' },
-  { id: 2, sender: 'user', text: 'Oh, hello! All perfectly.\nI will check it and get back to you soon', time: '04:45 PM' },
-  { id: 3, sender: 'vendor', name: 'Jennifer Markus', avatar: '', text: 'Oh, hello! All perfectly.\nI will check it and get back to you soon', time: '04:45 PM' },
+  { id: 1, sender: 'vendor', name: 'Vendor', avatar: '', text: 'Halo! Mohon tunggu sebentar, kami sedang memproses pesanan Anda.', time: '04:45 PM' }
 ])
 
 // Upload proof
@@ -27,6 +31,8 @@ function sendMessage() {
   chatMessages.value.push({
     id: Date.now(),
     sender: 'user',
+    name: 'Pembeli',
+    avatar: '',
     text: chatMessage.value.trim(),
     time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
   })
@@ -46,12 +52,87 @@ function uploadProof() {
   showUploadModal.value = true
 }
 
-onMounted(() => {
+function handleFileChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    selectedFile.value = target.files[0] || null
+  }
+}
+
+async function submitProof() {
+  if (!selectedFile.value) {
+    alert('Silakan pilih berkas bukti transfer terlebih dahulu.')
+    return
+  }
+  isUploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+    
+    await api.post(`/orders/${orderId}/upload-payment-proof`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    
+    alert('Bukti transfer berhasil dikirim. Menunggu verifikasi admin finance.')
+    showUploadModal.value = false
+    selectedFile.value = null
+    await fetchOrder()
+  } catch (err: any) {
+    console.error('Failed to upload proof', err)
+    alert(err.response?.data?.message || 'Gagal mengunggah bukti transfer. Silakan coba lagi.')
+  } finally {
+    isUploading.value = false
+  }
+}
+
+async function fetchOrder() {
+  try {
+    const res = await api.get('/orders/my-orders')
+    const allOrders = res.data
+    order.value = allOrders.find((o: any) => o.id === orderId)
+  } catch (err) {
+    console.error('Failed to fetch order details', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+let pollInterval: any = null
+
+onMounted(async () => {
+  await fetchOrder()
+  pollInterval = setInterval(fetchOrder, 4000)
+
+  // Load chat messages from localStorage if any
+  const existingMsgs = JSON.parse(localStorage.getItem('automated_chat_messages') || '[]')
+  const orderMsg = existingMsgs.find((m: any) => m.orderId === `#ORD-${orderId}`)
+  if (orderMsg) {
+    chatMessages.value.push({
+      id: Date.now() - 1000,
+      sender: 'user',
+      name: 'Pembeli',
+      avatar: '',
+      text: `Halo, saya telah membuat pesanan baru.\n\nDetail Rencana: ${orderMsg.plan}\nCatatan Pembeli: ${orderMsg.notes}`,
+      time: orderMsg.time
+    })
+  }
+
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('vis'); observer.unobserve(e.target) } })
   }, { threshold: 0.08 })
   document.querySelectorAll('.ai:not(.vis)').forEach((el) => observer.observe(el))
 })
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
+})
+
+function formatPrice(val: number) {
+  if (!val) return 'Rp 0'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
 </script>
 
 <template>
@@ -69,56 +150,94 @@ onMounted(() => {
       </nav>
     </div>
 
+    <!-- Loading State -->
+    <div v-if="isLoading" class="pv__content">
+      <div class="verification-card ai vis">
+        <div class="vstep__spinner" style="margin: 0 auto; width: 32px; height: 32px;"></div>
+        <p style="margin-top: 1rem;">Memuat data pesanan...</p>
+      </div>
+    </div>
+
     <!-- Verification Content -->
-    <div class="pv__content">
-      <div class="verification-card ai" style="transition-delay:150ms">
-        <!-- Animated Icon -->
+    <div v-else-if="order" class="pv__content">
+      <div class="verification-card ai vis">
+        <!-- Animated Icon based on Status -->
         <div class="verification-card__icon-wrapper">
           <div class="verification-card__pulse"></div>
           <div class="verification-card__icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-if="order.status === 'IN_PROGRESS' || order.status === 'COMPLETED'" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2B8A3E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <svg v-else width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12 6 12 12 16 14"/>
             </svg>
           </div>
         </div>
 
-        <h2 class="verification-card__title">Sedang Memverifikasi Pembayaran Anda</h2>
+        <h2 class="verification-card__title">
+          <span v-if="order.status === 'UNPAID'">Selesaikan Pembayaran Anda</span>
+          <span v-else-if="order.status === 'PAID_PENDING_CONFIRMATION'">Menunggu Verifikasi Manual</span>
+          <span v-else>Pembayaran Berhasil Dikonfirmasi!</span>
+        </h2>
+        
+        <!-- Show Bank Instructions for UNPAID manual -->
+        <div v-if="order.status === 'UNPAID'" class="bank-details" style="margin-bottom: 2rem; background: #EEF2FF; border-radius: 12px; padding: 1.25rem; text-align: left; border: 1px solid #DBE4FF;">
+          <h4 style="margin: 0 0 0.5rem; font-weight: 700; color: #1E2A5E; font-size: 0.9375rem;">Informasi Rekening Transfer:</h4>
+          <p style="margin: 0.25rem 0; font-size: 0.875rem; color: #374151;">Bank Mandiri: <strong>123-456-7890</strong></p>
+          <p style="margin: 0.25rem 0; font-size: 0.875rem; color: #374151;">Atas Nama: <strong>PT Vendor Marketplace</strong></p>
+          <p style="margin: 0.5rem 0 0; font-size: 0.9375rem; color: #1E2A5E;">Total Tagihan: <strong style="font-size: 1.1rem; color: #3B5BDB;">{{ formatPrice(order.totalAmount) }}</strong></p>
+        </div>
+
         <p class="verification-card__desc">
-          Kami sedang memproses pembayaran Anda. Silakan tunggu beberapa saat atau unggah bukti transfer untuk mempercepat verifikasi manual.
+          <span v-if="order.status === 'UNPAID'">Silakan lakukan transfer ke rekening di atas dan unggah bukti transfer agar pesanan Anda dapat segera dikerjakan oleh vendor.</span>
+          <span v-else-if="order.status === 'PAID_PENDING_CONFIRMATION'">Bukti pembayaran telah diunggah dan sedang diperiksa oleh tim Finance kami. Mohon tunggu beberapa saat.</span>
+          <span v-else>Pembayaran Anda telah sukses diverifikasi. Vendor akan segera memulai pengerjaan proyek Anda. Silakan buka halaman detail pesanan.</span>
         </p>
 
         <!-- Status indicators -->
         <div class="verification-card__steps">
+          <!-- Step 1: Dibuat -->
           <div class="vstep vstep--done">
             <div class="vstep__dot">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
             <div class="vstep__info">
               <span class="vstep__label">Pesanan dibuat</span>
-              <span class="vstep__time">Baru saja</span>
+              <span class="vstep__time">ID: #ORD-{{ order.id }}</span>
             </div>
           </div>
-          <div class="vstep vstep--active">
+          <!-- Step 2: Menunggu / Terkirim -->
+          <div class="vstep" :class="{ 'vstep--done': order.status !== 'UNPAID', 'vstep--active': order.status === 'UNPAID' || order.status === 'PAID_PENDING_CONFIRMATION' }">
             <div class="vstep__dot">
-              <div class="vstep__spinner"></div>
+              <div v-if="order.status === 'UNPAID' || order.status === 'PAID_PENDING_CONFIRMATION'" class="vstep__spinner"></div>
+              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
             <div class="vstep__info">
-              <span class="vstep__label">Menunggu verifikasi pembayaran</span>
-              <span class="vstep__time">Estimasi 1-10 menit</span>
+              <span class="vstep__label">
+                <span v-if="order.status === 'UNPAID'">Menunggu unggah bukti transfer</span>
+                <span v-else-if="order.status === 'PAID_PENDING_CONFIRMATION'">Menunggu verifikasi pembayaran</span>
+                <span v-else>Pembayaran terverifikasi</span>
+              </span>
+              <span class="vstep__time" v-if="order.status === 'PAID_PENDING_CONFIRMATION'">Bukti telah terkirim</span>
+              <span class="vstep__time" v-else-if="order.status === 'UNPAID'">Silakan unggah bukti transfer</span>
             </div>
           </div>
-          <div class="vstep">
-            <div class="vstep__dot"></div>
+          <!-- Step 3: Dikonfirmasi -->
+          <div class="vstep" :class="{ 'vstep--done': order.status !== 'UNPAID' && order.status !== 'PAID_PENDING_CONFIRMATION', 'vstep--active': order.status === 'IN_PROGRESS' || order.status === 'COMPLETED' }">
+            <div class="vstep__dot">
+              <svg v-if="order.status === 'IN_PROGRESS' || order.status === 'COMPLETED' || order.status === 'DELIVERED'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
             <div class="vstep__info">
-              <span class="vstep__label">Pesanan dikonfirmasi</span>
+              <span class="vstep__label">Pesanan aktif &amp; dikonfirmasi</span>
             </div>
           </div>
         </div>
 
         <!-- Actions -->
         <div class="verification-card__actions">
-          <button class="verification-card__btn-upload" @click="uploadProof">
+          <button v-if="order.status === 'UNPAID'" class="verification-card__btn-upload" @click="uploadProof">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
@@ -126,6 +245,11 @@ onMounted(() => {
             </svg>
             Unggah Bukti Transfer
           </button>
+          
+          <router-link v-if="order.status !== 'UNPAID' && order.status !== 'PAID_PENDING_CONFIRMATION'" :to="`/pesanan/${order.id}`" class="verification-card__btn-upload" style="text-align: center; text-decoration: none;">
+            Lihat Detail Pesanan
+          </router-link>
+
           <button class="verification-card__btn-orders" @click="goToOrders">
             Lihat Pesanan Saya
           </button>
@@ -151,14 +275,18 @@ onMounted(() => {
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <p>Pilih atau drag file gambar bukti transfer</p>
+            <p v-if="selectedFile">File terpilih: <strong>{{ selectedFile.name }}</strong></p>
+            <p v-else>Pilih atau drag file gambar bukti transfer</p>
             <span>Format: JPG, PNG, PDF (maks 5MB)</span>
-            <input type="file" accept=".jpg,.jpeg,.png,.pdf" />
+            <input type="file" accept=".jpg,.jpeg,.png,.pdf" @change="handleFileChange" />
           </div>
         </div>
         <div class="modal__footer">
           <button class="modal__btn-cancel" @click="showUploadModal = false">Batal</button>
-          <button class="modal__btn-submit">Kirim Bukti</button>
+          <button class="modal__btn-submit" @click="submitProof" :disabled="isUploading">
+            <span v-if="isUploading">Mengirim...</span>
+            <span v-else>Kirim Bukti</span>
+          </button>
         </div>
       </div>
     </div>
