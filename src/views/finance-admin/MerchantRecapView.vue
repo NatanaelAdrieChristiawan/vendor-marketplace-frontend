@@ -1,24 +1,26 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useMerchants } from '../../composables/useMerchants'
 
 const router = useRouter()
+const { data: rawMerchants, isLoading } = useMerchants()
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const currentPage = ref(1)
 const itemsPerPage = 9
 
-const merchants = ref([
-  { id: 1, name: 'Creativ Studio', status: 'Aktif', joinDate: '12 Jan 2026', color: '#2A437E', initial: 'CS' },
-  { id: 2, name: 'PixelWork', status: 'Aktif', joinDate: '12 Jan 2026', color: '#7E56D8', initial: 'PW' },
-  { id: 3, name: 'DesignHub', status: 'Aktif', joinDate: '12 Jan 2026', color: '#E8860C', initial: 'DH' },
-  { id: 4, name: 'Creativ Studio', status: 'Aktif', joinDate: '12 Jan 2026', color: '#2A437E', initial: 'CS' },
-  { id: 5, name: 'PixelWork', status: 'Aktif', joinDate: '12 Jan 2026', color: '#7E56D8', initial: 'PW' },
-  { id: 6, name: 'DesignHub', status: 'Aktif', joinDate: '12 Jan 2026', color: '#E8860C', initial: 'DH' },
-  { id: 7, name: 'Creativ Studio', status: 'Aktif', joinDate: '12 Jan 2026', color: '#2A437E', initial: 'CS' },
-  { id: 8, name: 'PixelWork', status: 'Aktif', joinDate: '12 Jan 2026', color: '#7E56D8', initial: 'PW' },
-  { id: 9, name: 'DesignHub', status: 'Aktif', joinDate: '12 Jan 2026', color: '#E8860C', initial: 'DH' },
-])
+const merchants = computed(() => {
+  if (!rawMerchants.value) return []
+  return rawMerchants.value.map((m: any) => ({
+    id: m.id,
+    name: m.shopName,
+    status: m.status === 'VERIFIED' ? 'Aktif' : 'Menunggu',
+    joinDate: new Date(m.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
+    color: '#2A437E',
+    initial: m.shopName?.charAt(0).toUpperCase() || 'M'
+  }))
+})
 
 const filteredMerchants = computed(() => {
   let result = merchants.value

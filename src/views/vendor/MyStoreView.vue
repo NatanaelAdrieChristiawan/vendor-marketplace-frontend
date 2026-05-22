@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useWallet } from '../../composables/useWallet'
 
 const { merchantProfileQuery } = useWallet()
 const { data: store, isLoading } = merchantProfileQuery
+
+const primaryBank = computed(() => {
+  if (!store.value?.bankAccounts?.length) return null
+  return store.value.bankAccounts.find((b: any) => b.isPrimary) || store.value.bankAccounts[0]
+})
 </script>
 
 <template>
@@ -62,13 +68,13 @@ const { data: store, isLoading } = merchantProfileQuery
         </div>
       </div>
 
-      <div v-if="store.bankAccountName || store.bankAccountNumber" class="mb-12">
+      <div v-if="primaryBank" class="mb-12">
         <h3 class="text-xs font-bold text-gray-500 tracking-wider mb-3 uppercase px-1">Metode Pembayaran</h3>
         <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex items-center justify-between">
           <div>
-            <h4 class="text-[14px] font-bold text-gray-900 mb-1">{{ store.bankName || 'Bank' }}</h4>
-            <p class="text-sm text-gray-500">Rek: {{ store.bankAccountNumber }}</p>
-            <p class="text-xs text-gray-400">a.n. {{ store.bankAccountName }}</p>
+            <h4 class="text-[14px] font-bold text-gray-900 mb-1">{{ primaryBank.bankName }}</h4>
+            <p class="text-sm text-gray-500">Rek: {{ primaryBank.accountNumber }}</p>
+            <p class="text-xs text-gray-400">a.n. {{ primaryBank.accountHolderName }}</p>
           </div>
         </div>
       </div>

@@ -1,42 +1,51 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { useAuth } from '../../composables/useAuth'
+import { useIncomingOrders } from '../../composables/useOrders'
+import { useNotifications } from '../../composables/useNotifications'
 
-const stats = ref([
+const { profileQuery } = useAuth()
+const { data: incomingOrders } = useIncomingOrders()
+const { data: notifications } = useNotifications()
+
+const merchant = computed(() => profileQuery.data.value?.merchant)
+
+const stats = computed(() => [
   {
     label: 'Rata-rata Penilaian',
-    value: '4.9',
+    value: merchant.value?.avgRating?.toFixed(1) || '0.0',
     total: '/5.0',
-    info: 'Berdasarkan 124 ulasan',
+    info: `Berdasarkan ${merchant.value?.totalReviews || 0} ulasan`,
     icon: 'star',
     bgColor: 'bg-yellow-50',
     iconColor: 'text-yellow-400'
   },
   {
     label: 'Ketetapan Waktu Pelayanan',
-    value: '5',
-    info: '+2% dibanding bulan lalu',
+    value: '100%',
+    info: 'N/A',
     icon: 'clock',
     bgColor: 'bg-purple-50',
     iconColor: 'text-purple-400'
   },
   {
     label: 'Pesanan Aktif',
-    value: '5',
+    value: incomingOrders.value?.length || 0,
     icon: 'briefcase',
     bgColor: 'bg-green-50',
     iconColor: 'text-green-400'
   }
 ])
 
-const tasks = ref([
-  { id: '#ORD-99021', customer: 'Marcus J. Thorne', status: 'IN_PROGRESS' },
-  { id: '#ORD-99025', customer: 'Elena Rodriguez', status: 'IN_PROGRESS' },
-  { id: '#ORD-99032', customer: 'Samuel Kim', status: 'IN_PROGRESS' }
-])
+const tasks = computed(() => {
+  return incomingOrders.value?.map((o: any) => ({
+    id: `#ORD-${o.id}`,
+    customer: o.client?.fullName || 'Pembeli',
+    status: o.status
+  })) || []
+})
 
-const unreadMessages = ref([
-  { name: 'Andi', time: '14:22', text: 'Misi bang, boleh buat penawaran khus...' }
-])
+const unreadCount = computed(() => notifications.value?.filter((n: any) => !n.isRead).length || 0)
 </script>
 
 <template>
@@ -117,18 +126,20 @@ const unreadMessages = ref([
       <div class="bg-[#F8F9FE] rounded-[32px] p-8 border border-gray-100 shadow-sm space-y-6">
         <div class="flex justify-between items-center">
           <h2 class="text-base font-bold text-[#1E3A8A]">Pesan Belum Dibaca</h2>
-          <span class="px-3 py-1 bg-[#2F4DC4] text-white text-[10px] font-bold rounded-full uppercase tracking-tighter">
-            3 Baru
+          <span v-if="unreadCount > 0" class="px-3 py-1 bg-[#2F4DC4] text-white text-[10px] font-bold rounded-full uppercase tracking-tighter">
+            {{ unreadCount }} Baru
           </span>
         </div>
 
-        <div v-for="(msg, index) in unreadMessages" :key="index" class="bg-white rounded-2xl p-5 border border-gray-50 shadow-sm relative overflow-hidden">
+        <div v-if="notifications?.length === 0" class="text-center text-gray-400 text-sm py-4">
+          Tidak ada notifikasi.
+        </div>
+        <div v-for="msg in notifications?.slice(0, 3)" :key="msg.id" class="bg-white rounded-2xl p-5 border border-gray-50 shadow-sm relative overflow-hidden">
           <div class="flex justify-between items-start mb-2">
-            <h4 class="text-sm font-bold text-gray-900">{{ msg.name }}</h4>
-            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{{ msg.time }}</span>
+            <h4 class="text-sm font-bold text-gray-900">Sistem</h4>
           </div>
           <p class="text-xs text-gray-500 line-clamp-1 leading-relaxed">
-            {{ msg.text }}
+            {{ msg.message }}
           </p>
         </div>
 

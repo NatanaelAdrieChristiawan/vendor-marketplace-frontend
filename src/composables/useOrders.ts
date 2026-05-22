@@ -3,14 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import api from '../api/axios'
 
 export function useOrderDetail(orderId: string | number) {
-  return useQuery({
-    queryKey: ['order', String(orderId)],
-    queryFn: async () => {
-      const res = await api.get(`/orders/${orderId}/detail`)
-      return res.data
-    },
-    enabled: computed(() => !!orderId)
+  const { data: incomingOrders, isLoading } = useIncomingOrders()
+  
+  const order = computed(() => {
+    if (!incomingOrders.value) return null
+    return incomingOrders.value.find((o: any) => String(o.id) === String(orderId)) || null
   })
+
+  return {
+    data: order,
+    isLoading
+  }
 }
 
 export function useMyOrders() {
@@ -19,6 +22,29 @@ export function useMyOrders() {
     queryFn: async () => {
       const res = await api.get('/orders/my-orders')
       return res.data
+    }
+  })
+}
+
+export function useIncomingOrders() {
+  return useQuery({
+    queryKey: ['orders', 'incoming'],
+    queryFn: async () => {
+      const res = await api.get('/orders/incoming')
+      return res.data
+    }
+  })
+}
+
+export function useAcceptOrder() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (orderId: number | string) => {
+      const res = await api.patch(`/orders/${orderId}/accept`)
+      return res.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders', 'incoming'] })
     }
   })
 }
@@ -56,6 +82,18 @@ export function useOrderRevisions(orderId: string | number) {
     queryFn: async () => {
       const res = await api.get(`/orders/${orderId}/revisions`)
       return res.data
+    },
+    enabled: computed(() => !!orderId)
+  })
+}
+
+export function useOrderById(orderId: string | number) {
+  return useQuery({
+    queryKey: ['order', String(orderId)],
+    queryFn: async () => {
+      const res = await api.get(`/orders/my-orders`)
+      const orders = res.data
+      return orders.find((o: any) => String(o.id) === String(orderId))
     },
     enabled: computed(() => !!orderId)
   })

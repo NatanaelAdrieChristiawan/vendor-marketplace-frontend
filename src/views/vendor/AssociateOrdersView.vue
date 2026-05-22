@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useIncomingOrders } from '../../composables/useOrders'
 
-const orders = ref([
-  { id: 1, client: 'Creativ Studio', orderNo: '#ORD-20240512-9901', status: 'Baru', statusColor: 'bg-blue-50 text-blue-500' },
-  { id: 2, client: 'Creativ Studio', orderNo: '#ORD-REVISI-001', status: 'Revisi', statusColor: 'bg-red-50 text-red-500' },
-  { id: 3, client: 'Creativ Studio', orderNo: '#ORD-DISPUTE-002', status: 'Sengketa', statusColor: 'bg-orange-50 text-orange-500' },
-  { id: 4, client: 'Creativ Studio', orderNo: '#ORD-PROSES-003', status: 'Selesai', statusColor: 'bg-green-50 text-green-500' }
-])
+const { data: incomingOrders, isLoading } = useIncomingOrders()
+
+const orders = computed(() => {
+  return incomingOrders.value?.map((o: any) => ({
+    id: o.id,
+    client: o.client?.fullName || 'Pembeli',
+    orderNo: `#ORD-${o.id}`,
+    status: o.status === 'PAID_PENDING_CONFIRMATION' ? 'Baru' : o.status,
+    statusColor: o.status === 'PAID_PENDING_CONFIRMATION' ? 'bg-blue-50 text-blue-500' : 'bg-green-50 text-green-500'
+  })) || []
+})
 
 const filterOpen = ref(false)
 const selectedFilter = ref('Semua Status')

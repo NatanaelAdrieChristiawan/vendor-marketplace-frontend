@@ -1,30 +1,18 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '../../api/axios'
+import { useIncomingOrders } from '../../composables/useOrders'
 
 const router = useRouter()
+const { data: orders, isLoading } = useIncomingOrders()
 
-const orders = ref<any[]>([])
-const isLoading = ref(true)
 const statusFilter = ref<string>('ALL')
 const showFilterDropdown = ref(false)
 
-async function fetchIncomingOrders() {
-  try {
-    isLoading.value = true
-    const res = await api.get('/orders/incoming')
-    orders.value = res.data
-  } catch (err) {
-    console.error('Failed to fetch incoming orders', err)
-  } finally {
-    isLoading.value = false
-  }
-}
-
 const filteredOrders = computed(() => {
+  if (!orders.value) return []
   if (statusFilter.value === 'ALL') return orders.value
-  return orders.value.filter(o => o.status === statusFilter.value)
+  return orders.value.filter((o: any) => o.status === statusFilter.value)
 })
 
 const statusOptions = [
@@ -52,13 +40,7 @@ function selectFilter(key: string) {
   showFilterDropdown.value = false
 }
 
-function goToDetail(orderId: number) {
-  router.push(`/vendor/orders/${orderId}`)
-}
-
-onMounted(() => {
-  fetchIncomingOrders()
-})
+// Removed onMounted manual fetch
 </script>
 
 <template>

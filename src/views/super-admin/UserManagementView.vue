@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useUsers } from '../../composables/useUsers'
+
+const { data: rawUsers, isLoading } = useUsers()
 
 const showAddModal = ref(false)
 const searchQuery = ref('')
@@ -27,43 +30,20 @@ function goBack() {
   selectedAdmin.value = null
 }
 
-const users = ref([
-  {
-    id: 1,
-    name: 'Olivia Rhye',
-    personalEmail: 'olivia@gmail.com',
-    email: 'olivia@untitledui.com',
-    status: 'Active',
-    role: 'Admin Validator',
-  },
-  {
-    id: 2,
-    name: 'Phoenix Baker',
-    personalEmail: 'phoenix@gmail.com',
-    email: 'phoenix@untitledui.com',
-    status: 'Active',
-    role: 'Admin Validator',
-  },
-  {
-    id: 3,
-    name: 'Lana Steiner',
-    personalEmail: 'lana@gmail.com',
-    email: 'lana@untitledui.com',
-    status: 'Active',
-    role: 'Finance',
-  },
-  {
-    id: 4,
-    name: 'Demi Wilkinson',
-    personalEmail: 'demiWilkinson@gmail.com',
-    email: 'demi@untitledui.com',
-    status: 'Active',
-    role: 'Finance',
-  },
-])
+const users = computed(() => {
+  if (!rawUsers.value) return []
+  return rawUsers.value.map((u: any) => ({
+    id: u.id,
+    name: u.fullName,
+    personalEmail: '', // Backend doesn't have this, maybe use first part of email or empty
+    email: u.email,
+    status: u.isSuspended ? 'Suspended' : 'Active',
+    role: u.role
+  }))
+})
 
 const filteredUsers = computed(() => {
-  return users.value.filter((user) => {
+  return users.value.filter((user: any) => {
     const matchSearch =
       searchQuery.value === '' ||
       user.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
@@ -74,9 +54,20 @@ const filteredUsers = computed(() => {
   })
 })
 
-const totalAdminAktif = computed(() => 7)
-const activeValidator = computed(() => 5)
-const adminFinance = computed(() => 5)
+const totalAdminAktif = computed(() => {
+  return users.value.filter((u: any) => 
+    u.status === 'Active' && 
+    (u.role === 'ADMIN_VALIDATOR' || u.role === 'ADMIN_FINANCE' || u.role === 'SUPER_ADMIN')
+  ).length
+})
+
+const activeValidator = computed(() => {
+  return users.value.filter((u: any) => u.role === 'ADMIN_VALIDATOR' && u.status === 'Active').length
+})
+
+const adminFinance = computed(() => {
+  return users.value.filter((u: any) => u.role === 'ADMIN_FINANCE' && u.status === 'Active').length
+})
 
 function openAddModal() {
   newAdmin.value = { name: '', email: '', role: 'Validator' }
@@ -95,10 +86,12 @@ function submitNewAdmin() {
 
 function getRoleColor(role: string) {
   switch (role) {
-    case 'Admin Validator':
+    case 'ADMIN_VALIDATOR':
       return 'bg-blue-50 text-blue-700 border-blue-200'
-    case 'Finance':
+    case 'ADMIN_FINANCE':
       return 'bg-red-50 text-red-600 border-red-200'
+    case 'SUPER_ADMIN':
+      return 'bg-purple-50 text-purple-700 border-purple-200'
     default:
       return 'bg-gray-50 text-gray-700 border-gray-200'
   }
@@ -122,7 +115,14 @@ function getRoleColor(role: string) {
     </div>
 
     <!-- Stat Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div v-if="isLoading" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div v-for="i in 3" :key="i" class="bg-white border border-gray-200 rounded-2xl p-5 animate-pulse">
+        <div class="w-10 h-10 bg-gray-200 rounded-xl mb-3"></div>
+        <div class="h-8 bg-gray-200 rounded w-1/4 mb-2"></div>
+        <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+      </div>
+    </div>
+    <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <!-- Total Admin Aktif -->
       <div class="bg-white border border-gray-200 rounded-2xl p-5 flex flex-col gap-3">
         <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
@@ -253,12 +253,26 @@ function getRoleColor(role: string) {
                 Email
               </th>
               <th scope="col" class="px-6 py-4 text-center text-xs font-medium text-gray-500 tracking-wider">
-                Aktivitas Terakhir
+                Action
               </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <template v-for="(user, index) in filteredUsers" :key="index">
+            <template v-if="isLoading">
+              <tr v-for="i in 5" :key="i" class="animate-pulse">
+                <td class="px-6 py-4 whitespace-nowrap"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+                <td class="px-6 py-4 whitespace-nowrap"><div class="h-6 bg-gray-200 rounded-md w-16"></div></td>
+                <td class="px-6 py-4 whitespace-nowrap"><div class="h-6 bg-gray-200 rounded-full w-24"></div></td>
+                <td class="px-6 py-4 whitespace-nowrap"><div class="h-4 bg-gray-200 rounded w-32"></div></td>
+                <td class="px-6 py-4 whitespace-nowrap text-center"><div class="h-8 w-8 bg-gray-200 rounded-full mx-auto"></div></td>
+              </tr>
+            </template>
+            <tr v-else-if="filteredUsers.length === 0">
+              <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                Tidak ada data member yang ditemukan
+              </td>
+            </tr>
+            <template v-else v-for="(user, index) in filteredUsers" :key="index">
               <tr class="hover:bg-gray-50 transition-colors group">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex flex-col">
@@ -273,7 +287,7 @@ function getRoleColor(role: string) {
                     <!-- Dot -->
                     <span
                       class="w-1.5 h-1.5 rounded-full"
-                      :class="user.status === 'Active' ? 'bg-green-500' : 'bg-amber-500'"
+                      :class="user.status === 'Active' ? 'bg-green-500' : 'bg-red-500'"
                     ></span>
                     {{ user.status }}
                   </span>
@@ -283,7 +297,7 @@ function getRoleColor(role: string) {
                     class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border"
                     :class="getRoleColor(user.role)"
                   >
-                    {{ user.role }}
+                    {{ user.role.replace('_', ' ') }}
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">

@@ -2,6 +2,16 @@ import { computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import api from '../api/axios'
 
+export function useMerchants() {
+  return useQuery({
+    queryKey: ['merchants', 'all'],
+    queryFn: async () => {
+      const res = await api.get('/merchants')
+      return res.data
+    }
+  })
+}
+
 export function useMerchantDetail(merchantId: string | number) {
   return useQuery({
     queryKey: ['merchant', String(merchantId)],
@@ -32,5 +42,15 @@ export function useMerchantWithdrawals(merchantId: string | number) {
       return res.data
     },
     enabled: computed(() => !!merchantId)
+  })
+}
+
+export function useMerchantLeaderboard() {
+  return useQuery({
+    queryKey: ['merchants', 'leaderboard'],
+    queryFn: async () => {
+      const { data } = await api.get('/merchants/leaderboard')
+      return data
+    }
   })
 }

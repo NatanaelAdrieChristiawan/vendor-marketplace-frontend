@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useSystemConfig } from '../../composables/useSystemConfig'
+import { useCategories } from '../../composables/useCategories'
 import api from '../../api/axios'
 
 const { configsQuery, auditLogsQuery, updateConfigMutation } = useSystemConfig()
+const { data: categories, isLoading: loadingCategories, refetch: refetchCategories } = useCategories()
 
-const categories = ref<any[]>([])
-const loadingCategories = ref(false)
 const newCategoryName = ref('')
 const newCategoryCommission = ref(5)
 const showSecurityModal = ref(false)
@@ -37,22 +37,6 @@ const newFee = ref('')
 watch(() => getConf('maintenance_message'), (newVal) => {
   maintenanceMessageInput.value = newVal
 }, { immediate: true })
-
-async function fetchCategories() {
-  loadingCategories.value = true
-  try {
-    const response = await api.get('/categories')
-    categories.value = response.data
-  } catch (err) {
-    console.error(err)
-  } finally {
-    loadingCategories.value = false
-  }
-}
-
-onMounted(() => {
-  fetchCategories()
-})
 
 function openSecurityModal(action: () => Promise<void>) {
   pendingAction.value = action

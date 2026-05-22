@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCategories } from '../../composables/useCategories'
 import Toast from '../../components/ui/Toast.vue'
 import api from '../../api/axios'
 import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
 const { uploadFile } = useAuth()
+const { data: categories, isLoading: isLoadingCategories } = useCategories()
 
 const title = ref('')
 const description = ref('')
@@ -18,41 +20,26 @@ const toastData = reactive<{type: 'info' | 'success' | 'error', title: string, s
   subtitle: ''
 })
 
-interface CategoryItem {
-  id: number
-  name: string
-  commissionRate: string
-}
-
-const categories = ref<CategoryItem[]>([])
-const isLoadingCategories = ref(true)
 const isSubmitting = ref(false)
 
 const tiers = ref([
-  { id: 'TIER 01', name: 'Basic', price: '0.00', features: '' },
-  { id: 'TIER 02', name: 'Standard', price: '0.00', features: '', isHighlighted: true },
-  { id: 'TIER 03', name: 'Premium', price: '0.00', features: '' },
+  { id: '01', name: 'Basic', price: '', features: '', isHighlighted: false },
+  { id: '02', name: 'Standard', price: '', features: '', isHighlighted: true },
+  { id: '03', name: 'Premium', price: '', features: '', isHighlighted: false },
 ])
 
 const isDragging = ref(false)
 const uploadedFiles = ref<{ name: string; size: string }[]>([])
 const rawFiles = ref<File[]>([])
 
-onMounted(async () => {
-  try {
-    const res = await api.get('/categories')
-    categories.value = res.data
-  } catch (err) {
-    console.error('Failed to load categories', err)
-    toastData.type = 'error'
-    toastData.title = 'Gagal Memuat Kategori'
-    toastData.subtitle = 'Tidak dapat mengambil kategori dari server'
-    showToast.value = true
-    setTimeout(() => { showToast.value = false }, 3000)
-  } finally {
-    isLoadingCategories.value = false
-  }
-})
+const showErrorToast = (title: string, subtitle: string) => {
+  toastData.type = 'error'
+  toastData.title = title
+  toastData.subtitle = subtitle
+  showToast.value = true
+  setTimeout(() => { showToast.value = false }, 3000)
+}
+
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false
@@ -186,14 +173,6 @@ async function handleComplete() {
   } finally {
     isSubmitting.value = false
   }
-}
-
-function showErrorToast(title: string, subtitle: string) {
-  toastData.type = 'error'
-  toastData.title = title
-  toastData.subtitle = subtitle
-  showToast.value = true
-  setTimeout(() => { showToast.value = false }, 3000)
 }
 </script>
 

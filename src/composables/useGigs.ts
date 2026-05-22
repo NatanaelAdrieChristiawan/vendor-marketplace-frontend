@@ -13,14 +13,13 @@ export function useGigDetail(gigId: string | number) {
   })
 }
 
-export function useGigReviews(gigId: string | number) {
+export function useMyGigs() {
   return useQuery({
-    queryKey: ['reviews', 'gig', String(gigId)],
+    queryKey: ['gigs', 'my'],
     queryFn: async () => {
-      const res = await api.get(`/reviews?gigId=${gigId}`)
+      const res = await api.get('/gigs/my-gigs')
       return res.data
-    },
-    enabled: computed(() => !!gigId)
+    }
   })
 }
 
@@ -32,5 +31,15 @@ export function useFeaturedGigs() {
       return res.data
     },
     staleTime: 1000 * 60 * 5
+  })
+}
+
+export function useGigsList(params?: { categoryId?: number; limit?: number; q?: string }) {
+  return useQuery({
+    queryKey: ['gigs', 'list', params],
+    queryFn: async () => {
+      const { data } = await api.get('/gigs', { params })
+      return data
+    }
   })
 }

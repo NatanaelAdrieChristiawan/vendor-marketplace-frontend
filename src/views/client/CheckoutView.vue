@@ -33,12 +33,27 @@ const configQuery = useQuery({
 })
 
 const serviceFee = computed(() => {
+  if (!configQuery.data.value) return 25000
   const configs = configQuery.data.value
-  if (!configs) return 25000
   const entry = Array.isArray(configs)
     ? configs.find((c: any) => c.key === 'service_fee')
-    : configs.service_fee
-  return entry ? Number(entry.value ?? entry) : 25000
+    : configs['service_fee']
+  return entry ? Number(entry.value || entry) : 25000
+})
+
+const bankMethods = computed(() => {
+  if (!configQuery.data.value) return banks
+  const configs = configQuery.data.value
+  const entry = Array.isArray(configs)
+    ? configs.find((c: any) => c.key === 'payment_va_banks')
+    : configs['payment_va_banks']
+  
+  if (!entry) return banks
+  try {
+    const val = typeof entry.value === 'string' ? JSON.parse(entry.value) : (entry.value || entry)
+    if (Array.isArray(val)) return val
+  } catch (_) {}
+  return banks
 })
 
 const totalPrice = computed(() => chosenPrice.value + serviceFee.value)
@@ -236,7 +251,7 @@ onMounted(async () => {
             <p class="payment-options__label">Pilih Bank Virtual Account (Simulasi)</p>
             <div class="bank-grid">
               <button
-                v-for="bank in banks"
+                v-for="bank in bankMethods"
                 :key="bank.id"
                 class="bank-option"
                 :class="{ 'bank-option--active': selectedBank === bank.id }"

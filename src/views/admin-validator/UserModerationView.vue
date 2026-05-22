@@ -1,15 +1,33 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useUsers } from '../../composables/useUsers'
 
 const router = useRouter()
+const { data: rawUsers, isLoading } = useUsers()
 
-const users = ref([
-  { id: 'ID0001', name: 'Olivia Rhye', email: 'olivia@untitledui.com', status: 'Suspend', avatar: 'https://i.pravatar.cc/150?img=1' },
-  { id: 'ID0002', name: 'Phoenix Baker', email: 'phoenix@untitledui.com', status: 'Active', avatar: 'https://i.pravatar.cc/150?img=2' },
-  { id: 'ID0003', name: 'Lana Steiner', email: 'lana@untitledui.com', status: 'Active', avatar: 'https://i.pravatar.cc/150?img=3' },
-  { id: 'ID0004', name: 'Demi Wilkinson', email: 'demi@untitledui.com', status: 'Active', avatar: 'https://i.pravatar.cc/150?img=4' },
-])
+const searchQuery = ref('')
+const statusFilter = ref('all')
+
+const users = computed(() => {
+  if (!rawUsers.value) return []
+  return rawUsers.value.map((u: any) => ({
+    id: u.id,
+    name: u.fullName,
+    email: u.email,
+    status: u.isSuspended ? 'Suspend' : 'Active',
+    avatar: u.avatarUrl || `https://i.pravatar.cc/150?img=${u.id % 70}`
+  }))
+})
+
+const filteredUsers = computed(() => {
+  return users.value.filter((user: any) => {
+    const matchSearch = user.name.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
+                      user.email.toLowerCase().includes(searchQuery.value.toLowerCase())
+    const matchStatus = statusFilter.value === 'all' || user.status === statusFilter.value
+    return matchSearch && matchStatus
+  })
+})
 
 const showDetailModal = ref(false)
 const showSuspendConfirmModal = ref(false)
@@ -44,8 +62,7 @@ function closeSuspendConfirm() {
 
 function submitSuspend() {
   if (selectedUser.value) {
-    selectedUser.value.status = 'Suspend'
-    // Logik suspend lainnya
+    // Call API here if needed, but for now just local update or close
   }
   closeSuspendConfirm()
   closeDetail()
@@ -65,16 +82,17 @@ function submitSuspend() {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <input 
+          v-model="searchQuery"
           type="text" 
           placeholder="cari member" 
           class="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent transition-all"
         />
       </div>
-      <div class="w-full sm:w-auto">
-        <select class="w-full sm:w-auto px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] appearance-none pr-10 relative">
-          <option>Semua Status</option>
-          <option>Active</option>
-          <option>Suspend</option>
+      <div class="w-full sm:w-auto relative">
+        <select v-model="statusFilter" class="w-full sm:w-auto px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] appearance-none pr-10">
+          <option value="all">Semua Status</option>
+          <option value="Active">Active</option>
+          <option value="Suspend">Suspend</option>
         </select>
         <!-- Custom arrow for select -->
         <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
@@ -87,7 +105,7 @@ function submitSuspend() {
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div class="p-6 border-b border-gray-100 flex items-center gap-3">
         <h2 class="text-lg font-bold text-gray-800">Total User</h2>
-        <span class="px-3 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">32 users</span>
+        <span class="px-3 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">{{ users.length }} users</span>
       </div>
       
       <div class="overflow-x-auto">
@@ -104,20 +122,31 @@ function submitSuspend() {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50/50 transition-colors">
+            <template v-if="isLoading">
+              <tr v-for="i in 5" :key="i" class="animate-pulse">
+                <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+                <td class="px-6 py-4"><div class="h-6 bg-gray-200 rounded-md w-16"></div></td>
+                <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-32"></div></td>
+                <td class="px-6 py-4 text-right"><div class="h-8 w-8 bg-gray-200 rounded-lg ml-auto"></div></td>
+              </tr>
+            </template>
+            <tr v-else-if="filteredUsers.length === 0">
+              <td colspan="4" class="px-6 py-12 text-center text-gray-500 font-medium">Data user tidak ditemukan</td>
+            </tr>
+            <tr v-else v-for="user in filteredUsers" :key="user.id" class="hover:bg-gray-50/50 transition-colors group">
               <td class="px-6 py-4">
-                <div class="font-bold text-gray-900">{{ user.name }}</div>
-                <div class="text-xs text-gray-500 mt-0.5">{{ user.id }}</div>
+                <div class="font-bold text-gray-900 group-hover:text-[#1E3A8A] transition-colors">{{ user.name }}</div>
+                <div class="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wider font-semibold">ID: #{{ user.id }}</div>
               </td>
               <td class="px-6 py-4">
-                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-xs font-medium" :class="user.status === 'Active' ? 'text-gray-700' : 'text-gray-700'">
-                  <span class="w-1.5 h-1.5 rounded-full" :class="user.status === 'Active' ? 'bg-green-500' : 'bg-orange-500'"></span>
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700">
+                  <span class="w-1.5 h-1.5 rounded-full" :class="user.status === 'Active' ? 'bg-green-500' : 'bg-red-500'"></span>
                   {{ user.status }}
                 </div>
               </td>
               <td class="px-6 py-4 text-gray-500 font-medium">{{ user.email }}</td>
               <td class="px-6 py-4 text-right">
-                <button @click="openDetail(user)" class="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100">
+                <button @click="openDetail(user)" class="text-gray-400 hover:text-[#1E3A8A] transition-colors p-2 rounded-lg hover:bg-white hover:shadow-sm border border-transparent">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                 </button>
               </td>

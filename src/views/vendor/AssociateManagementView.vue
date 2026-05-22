@@ -1,45 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useAssociates } from '../../composables/useAssociates'
 
+const { associatesQuery, addAssociateMutation } = useAssociates()
 const isInviteModalOpen = ref(false)
 
-const associates = ref([
-  {
-    id: 1,
-    name: 'Olivia Rhye',
-    email: 'olivia@untitledui.com',
+const associates = computed(() => {
+  return associatesQuery.data.value?.map((a: any) => ({
+    id: a.id,
+    name: a.user?.fullName || 'User',
+    email: a.user?.email || '-',
     status: 'Active',
-    role: 'Associate',
-    joinedDate: '12 Mei 2026',
-  },
-  {
-    id: 2,
-    name: 'Phoenix Baker',
-    email: 'phoenix@untitledui.com',
-    status: 'Active',
-    role: 'Associate',
-    joinedDate: '12 Mei 2026',
-  },
-  {
-    id: 3,
-    name: 'Lana Steiner',
-    email: 'lana@untitledui.com',
-    status: 'Active',
-    role: 'Associate',
-    joinedDate: '12 Mei 2026',
-  },
-  {
-    id: 4,
-    name: 'Demi Wilkinson',
-    email: 'demi@untitledui.com',
-    status: 'Active',
-    role: 'Associate',
-    joinedDate: '12 Mei 2026',
-  },
-])
+    role: a.permission,
+    joinedDate: new Date(a.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+  })) || []
+})
 
 const inviteEmail = ref('')
-const inviteRole = ref('Merchant Associate')
+const inviteRole = ref('CAN_MANAGE_ORDERS')
 
 function openModal() {
   isInviteModalOpen.value = true
@@ -48,20 +26,19 @@ function openModal() {
 function closeModal() {
   isInviteModalOpen.value = false
   inviteEmail.value = ''
-  inviteRole.value = 'Merchant Associate'
+  inviteRole.value = 'CAN_MANAGE_ORDERS'
 }
 
-function sendInvite() {
-  // Mock adding user
-  associates.value.unshift({
-    id: Date.now(),
-    name: inviteEmail.value.split('@')[0] || 'New Associate',
-    email: inviteEmail.value,
-    status: 'Active',
-    role: 'Associate',
-    joinedDate: 'Hari ini',
-  })
-  closeModal()
+async function sendInvite() {
+  try {
+    await addAssociateMutation.mutateAsync({
+      email: inviteEmail.value,
+      permission: inviteRole.value
+    })
+    closeModal()
+  } catch (err) {
+    console.error('Failed to add associate', err)
+  }
 }
 </script>
 
@@ -79,7 +56,7 @@ function sendInvite() {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
         </svg>
       </div>
-      <h2 class="text-[32px] font-bold text-gray-900 leading-tight">7</h2>
+      <h2 class="text-[32px] font-bold text-gray-900 leading-tight">{{ associates.length }}</h2>
       <p class="text-xs font-medium text-gray-400 mt-1">Total Associate aktif</p>
     </div>
 

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import Button from '../../components/ui/Button.vue'
 import { useAuth } from '../../composables/useAuth'
+import { useIncomingOrders, useAcceptOrder } from '../../composables/useOrders'
+import { useNotifications } from '../../composables/useNotifications'
 
 const { profileQuery } = useAuth()
 const user = computed(() => profileQuery.data.value)
@@ -11,43 +13,45 @@ const isVerified = computed(() => {
   const s = merchantStatus.value
   return s === 'ACTIVE' || s === 'VACATION'
 })
-const tasks = ref([
-  {
-    id: '#ORD-8821',
-    title: 'Desain Postingan Media Sosial - Paket Premium',
-    user: 'Sarah',
-    avatar: 'https://i.pravatar.cc/150?u=sarah1',
-    time: '13 Jam',
-    status: 'BARU',
-  },
-  {
-    id: '#ORD-8815',
-    title: 'Fotografi Produk - Gadget Teknologi',
-    user: 'Sarah',
-    avatar: 'https://i.pravatar.cc/150?u=sarah2',
-    date: '24 Okt 2023',
-    status: 'SEDANG DIPROSES',
-  },
-  {
-    id: '#ORD-8790',
-    title: 'Penulisan Konten',
-    user: 'Sarah',
-    avatar: 'https://i.pravatar.cc/150?u=sarah3',
-    time: 'Due Today',
-    status: 'DALAM REVISI',
-  },
-])
 
-const messages = ref([
-  {
-    id: 1,
-    name: 'Andi',
-    avatar: 'https://i.pravatar.cc/150?u=andi',
-    time: '10m ago',
-    text: 'Misi bang, boleh buat penawaran khusus untuk 3 video...',
-    unread: 1,
+const { data: incomingOrders } = useIncomingOrders()
+const { data: notifications } = useNotifications()
+const acceptOrderMutation = useAcceptOrder()
+
+const tasks = computed(() => {
+  return incomingOrders.value?.map((o: any) => ({
+    id: o.id,
+    orderId: `#ORD-${o.id}`,
+    title: o.gig?.title || 'Pesanan Khusus',
+    user: o.client?.fullName || 'Pembeli',
+    avatar: `https://ui-avatars.com/api/?name=${o.client?.fullName || 'User'}&background=random`,
+    time: 'Baru',
+    status: o.status === 'PAID_PENDING_CONFIRMATION' ? 'BARU' : o.status,
+  })) || []
+})
+
+const messageList = computed(() => {
+  return notifications.value?.slice(0, 5).map((n: any) => ({
+    id: n.id,
+    name: n.title,
+    avatar: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+    time: 'Recent',
+    text: n.message,
+    unread: n.isRead ? 0 : 1,
+  })) || []
+})
+
+const unreadCount = computed(() => notifications.value?.filter((n: any) => !n.isRead).length || 0)
+
+const activeOrdersCount = computed(() => incomingOrders.value?.length || 0)
+
+async function handleAccept(id: number) {
+  try {
+    await acceptOrderMutation.mutateAsync(id)
+  } catch (err) {
+    console.error('Gagal menerima pesanan', err)
   }
-])
+}
 </script>
 
 <template>
@@ -86,14 +90,13 @@ const messages = ref([
           <div class="w-12 h-12 rounded-2xl bg-orange-100 text-orange-500 flex items-center justify-center">
             <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
           </div>
-          <span class="text-sm font-medium text-emerald-500 bg-emerald-50 px-3 py-1 rounded-full">Berdasarkan 124 ulasan</span>
         </div>
         <div>
           <div class="flex items-baseline gap-1 mb-1">
-            <span class="text-[32px] font-bold text-gray-900 leading-none">4.9</span>
+            <span class="text-[32px] font-bold text-gray-900 leading-none">{{ (user?.merchant?.avgRating || 0).toFixed(1) }}</span>
             <span class="text-gray-500 font-medium text-lg">/5.0</span>
           </div>
-          <p class="text-gray-400 text-sm font-medium">Rata-rata Penilaian</p>
+          <p class="text-gray-400 text-sm font-medium">Berdasarkan {{ user?.merchant?.totalReviews || 0 }} ulasan</p>
         </div>
       </div>
 
@@ -117,7 +120,7 @@ const messages = ref([
           </div>
         </div>
         <div>
-          <div class="text-[32px] font-bold text-gray-900 leading-none mb-2">5</div>
+          <div class="text-[32px] font-bold text-gray-900 leading-none mb-2">{{ activeOrdersCount }}</div>
           <p class="text-gray-400 text-sm font-medium">Pesanan Aktif</p>
         </div>
       </div>
@@ -131,13 +134,16 @@ const messages = ref([
         </div>
         
         <div class="p-6 flex flex-col gap-4">
+          <div v-if="tasks.length === 0" class="py-8 text-center text-gray-400 text-sm">
+            Belum ada pesanan aktif.
+          </div>
           <div 
             v-for="task in tasks" 
             :key="task.id"
             class="border border-gray-100 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#FCFCFD]"
           >
             <div class="flex-1">
-              <span class="text-brand-blue text-sm font-semibold mb-1 block">{{ task.id }}</span>
+              <span class="text-brand-blue text-sm font-semibold mb-1 block">{{ task.orderId }}</span>
               <h3 class="text-base font-bold text-gray-900 mb-3">{{ task.title }}</h3>
               
               <div class="flex items-center gap-4">
@@ -150,23 +156,26 @@ const messages = ref([
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <span class="text-sm font-medium">{{ task.time }}</span>
                 </div>
-
-                <div v-if="task.date" class="flex items-center gap-1.5 text-brand-navy font-medium">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  <span class="text-sm">{{ task.date }}</span>
-                </div>
               </div>
             </div>
             
             <div class="flex items-center gap-4 w-full sm:w-auto mt-2 sm:mt-0">
               <span v-if="task.status === 'BARU'" class="px-3 py-1.5 bg-orange-100 text-orange-600 text-xs font-bold rounded-lg shrink-0">BARU</span>
-              <span v-else-if="task.status === 'SEDANG DIPROSES'" class="text-blue-500 text-xs font-bold uppercase tracking-wider shrink-0">{{ task.status }}</span>
-              <span v-else-if="task.status === 'DALAM REVISI'" class="px-3 py-1.5 bg-orange-100 text-orange-600 text-xs font-bold rounded-lg shrink-0">DALAM REVISI</span>
+              <span v-else-if="task.status === 'IN_PROGRESS'" class="text-blue-500 text-xs font-bold uppercase tracking-wider shrink-0">DIPROSES</span>
               
-              <Button v-if="task.status === 'BARU'" variant="primary" class="w-full sm:w-auto px-6 py-2 rounded-xl text-sm whitespace-nowrap">
+              <Button 
+                v-if="task.status === 'BARU'" 
+                variant="primary" 
+                class="w-full sm:w-auto px-6 py-2 rounded-xl text-sm whitespace-nowrap"
+                @click="handleAccept(task.id)"
+              >
                 Terima Pesanan
               </Button>
-              <button v-else class="w-full sm:w-auto px-6 py-2 rounded-xl text-sm font-bold text-gray-800 bg-white border border-gray-200 hover:bg-gray-50 transition-colors whitespace-nowrap">
+              <button 
+                v-else 
+                @click="$router.push(`/vendor/orders/${task.id}`)"
+                class="w-full sm:w-auto px-6 py-2 rounded-xl text-sm font-bold text-gray-800 bg-white border border-gray-200 hover:bg-gray-50 transition-colors whitespace-nowrap"
+              >
                 Lihat
               </button>
             </div>
@@ -176,13 +185,16 @@ const messages = ref([
 
       <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-fit">
         <div class="p-6 border-b border-gray-100 flex justify-between items-center">
-          <h2 class="text-lg font-bold text-gray-900">Pesan Belum Dibaca</h2>
-          <span class="w-6 h-6 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">3</span>
+          <h2 class="text-lg font-bold text-gray-900">Notifikasi Terbaru</h2>
+          <span v-if="unreadCount > 0" class="w-6 h-6 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">{{ unreadCount }}</span>
         </div>
         
         <div class="flex flex-col flex-1">
+          <div v-if="messageList.length === 0" class="p-8 text-center text-gray-400 text-sm">
+            Tidak ada notifikasi.
+          </div>
           <router-link 
-            v-for="msg in messages" 
+            v-for="msg in messageList" 
             :key="msg.id"
             to="/vendor/messages"
             class="p-5 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer flex gap-4"
@@ -190,20 +202,16 @@ const messages = ref([
             <img :src="msg.avatar" alt="Avatar" class="w-10 h-10 rounded-full object-cover shrink-0" />
             <div class="flex-1 min-w-0">
               <div class="flex justify-between items-center mb-1">
-                <h4 class="font-bold text-gray-900 text-sm">{{ msg.name }}</h4>
-                <span class="text-xs text-[#4B6BFB] font-medium">{{ msg.time }}</span>
+                <h4 class="font-bold text-gray-900 text-sm leading-tight">{{ msg.name }}</h4>
               </div>
-              <p class="text-sm text-gray-600 truncate">{{ msg.text }}</p>
-            </div>
-            <div v-if="msg.unread" class="flex flex-col justify-center shrink-0">
-              <span class="w-5 h-5 rounded-full bg-[#4B6BFB] text-white text-[10px] font-bold flex items-center justify-center">{{ msg.unread }}</span>
+              <p class="text-xs text-gray-500 truncate">{{ msg.text }}</p>
             </div>
           </router-link>
         </div>
         
-        <div class="p-6 mt-auto text-center">
+        <div class="p-6 mt-auto text-center border-t border-gray-50">
           <router-link to="/vendor/messages" class="text-[#4B6BFB] font-bold text-sm hover:text-brand-navy flex items-center justify-center gap-2 mx-auto">
-            Lihat semua pesan
+            Lihat semua notifikasi
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
           </router-link>
         </div>

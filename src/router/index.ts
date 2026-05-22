@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth.store'
+import api from '../api/axios'
 
 import ClientLayout from '../layouts/ClientLayout.vue'
 import AuthLayout from '../layouts/AuthLayout.vue'
@@ -400,10 +401,30 @@ const router = createRouter({
   },
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
+
+  if (authStore.token && !authStore.user) {
+    try {
+      const { data } = await api.get('/auth/profile')
+      authStore.user = data
+    } catch (err) {
+      authStore.logout()
+    }
+  }
+
   const isAuthenticated = authStore.isAuthenticated
   const userRole = authStore.currentUser?.role
+
+  const getDashboardPath = (role: string | undefined) => {
+    if (!role) return '/'
+    const r = role.toUpperCase()
+    if (r === 'SUPER_ADMIN') return '/super-admin/dashboard'
+    if (r === 'ADMIN_FINANCE') return '/finance-admin/dashboard'
+    if (r === 'ADMIN_VALIDATOR') return '/admin-validator/dashboard'
+    if (r === 'MERCHANT_OWNER' || r === 'MERCHANT_ASSOCIATE') return '/vendor/dashboard'
+    return '/'
+  }
 
   if (to.meta.requiresAuth) {
     if (!isAuthenticated) {
@@ -417,22 +438,19 @@ router.beforeEach((to, _from, next) => {
       if (userRole && allowedRoles.includes(userRole)) {
         next()
       } else {
-        if (userRole === 'SUPER_ADMIN') next('/super-admin/dashboard')
-        else if (userRole === 'ADMIN_FINANCE') next('/finance-admin/dashboard')
-        else if (userRole === 'ADMIN_VALIDATOR') next('/admin-validator/dashboard')
-        else if (userRole === 'MERCHANT_OWNER' || userRole === 'MERCHANT_ASSOCIATE') next('/vendor/dashboard')
-        else next('/')
+        next(getDashboardPath(userRole))
       }
     } else {
       next()
     }
   } 
-  else if (isAuthenticated && (to.name === 'UserLogin' || to.name === 'Register' || to.name === 'AdminLogin')) {
-    if (userRole === 'SUPER_ADMIN') next('/super-admin/dashboard')
-    else if (userRole === 'ADMIN_FINANCE') next('/finance-admin/dashboard')
-    else if (userRole === 'ADMIN_VALIDATOR') next('/admin-validator/dashboard')
-    else if (userRole === 'MERCHANT_OWNER' || userRole === 'MERCHANT_ASSOCIATE') next('/vendor/dashboard')
-    else next('/')
+  else if (isAuthenticated && (to.name === 'UserLogin' || to.name === 'Register' || to.name === 'AdminLogin' || to.path === '/' || to.name === 'Home')) {
+    const target = getDashboardPath(userRole)
+    if (target !== '/' && to.path !== target) {
+      next(target)
+    } else {
+      next()
+    }
   }
   else {
     next()

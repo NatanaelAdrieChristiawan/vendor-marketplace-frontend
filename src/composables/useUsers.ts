@@ -13,6 +13,16 @@ export function useUserDetail(userId: string | number) {
   })
 }
 
+export function useUsers() {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const res = await api.get('/users')
+      return res.data
+    }
+  })
+}
+
 export function useTransactions() {
   return useQuery({
     queryKey: ['transactions'],

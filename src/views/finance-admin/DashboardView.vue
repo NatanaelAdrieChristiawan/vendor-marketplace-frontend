@@ -1,13 +1,44 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { useTransactions } from '../../composables/useTransactions'
+import { useWithdrawals } from '../../composables/useWithdrawals'
+import { useRefunds } from '../../composables/useRefunds'
 
-const transactions = ref([
-  { date: '2023-10-24 14:20', desc: 'Order #MP-82910 Payment', amount: 'Rp 1.250.000', type: 'Pemasukan', typeColor: 'text-teal-600', typeIcon: '↓', status: 'Selesai', statusColor: 'bg-teal-50 text-teal-700 border-teal-200' },
-  { date: '2023-10-24 13:45', desc: 'Seller Withdrawal: TechStore ID', amount: 'Rp 5.400.000', type: 'Pengeluaran', typeColor: 'text-red-500', typeIcon: '↑', status: 'Menunggu', statusColor: 'bg-amber-50 text-amber-700 border-amber-200' },
-  { date: '2023-10-24 11:10', desc: 'Refund for Order #MP-82003', amount: 'Rp 345.000', type: 'Pengeluaran', typeColor: 'text-red-500', typeIcon: '↑', status: 'Disetujui', statusColor: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { date: '2023-10-24 09:30', desc: 'Service Fee Collection', amount: 'Rp 12.500.000', type: 'Pemasukan', typeColor: 'text-teal-600', typeIcon: '↓', status: 'Selesai', statusColor: 'bg-teal-50 text-teal-700 border-teal-200' },
-  { date: '2023-10-23 18:20', desc: 'Seller Withdrawal: FashionHub', amount: 'Rp 2.100.000', type: 'Pengeluaran', typeColor: 'text-red-500', typeIcon: '↑', status: 'Ditolak', statusColor: 'bg-red-50 text-red-600 border-red-200' },
-])
+const { allTransactionsQuery } = useTransactions()
+const { pendingWithdrawalsQuery } = useWithdrawals()
+const { refundsQuery } = useRefunds()
+
+const pendingPaymentsCount = computed(() => {
+  const txs = allTransactionsQuery.data.value || []
+  return txs.filter((t: any) => t.status === 'PENDING').length
+})
+
+const pendingWithdrawalsCount = computed(() => {
+  return (pendingWithdrawalsQuery.data.value || []).length
+})
+
+const approvedRefundsCount = computed(() => {
+  return (refundsQuery.data.value || []).length
+})
+
+const recentActivities = computed(() => {
+  const txs = (allTransactionsQuery.data.value || []).slice(0, 5).map((t: any) => ({
+    date: new Date(t.createdAt).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    desc: `Order #${t.orderId} Payment`,
+    amount: formatPrice(t.amount),
+    type: 'Pemasukan',
+    typeColor: 'text-teal-600',
+    typeIcon: '↓',
+    status: t.status === 'VERIFIED' ? 'Selesai' : (t.status === 'REJECTED' ? 'Ditolak' : 'Menunggu'),
+    statusColor: t.status === 'VERIFIED' ? 'bg-teal-50 text-teal-700 border-teal-200' : (t.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200')
+  }))
+  return txs
+})
+
+function formatPrice(val: any) {
+  if (!val) return 'Rp 0'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
 </script>
 
 <template>
@@ -33,7 +64,7 @@ const transactions = ref([
           </svg>
         </div>
         <div>
-          <p class="text-3xl font-bold text-gray-900">15 item</p>
+          <p class="text-3xl font-bold text-gray-900">{{ pendingPaymentsCount }} item</p>
           <p class="text-sm text-gray-500 mt-1">Pembayaran Masuk Tertunda</p>
         </div>
       </div>
@@ -46,7 +77,7 @@ const transactions = ref([
           </svg>
         </div>
         <div>
-          <p class="text-3xl font-bold text-gray-900">8 permintaan</p>
+          <p class="text-3xl font-bold text-gray-900">{{ pendingWithdrawalsCount }} permintaan</p>
           <p class="text-sm text-gray-500 mt-1">Penarikan Dana Tertunda</p>
         </div>
       </div>
@@ -59,7 +90,7 @@ const transactions = ref([
           </svg>
         </div>
         <div>
-          <p class="text-3xl font-bold text-gray-900">5 disetujui</p>
+          <p class="text-3xl font-bold text-gray-900">{{ approvedRefundsCount }} disetujui</p>
           <p class="text-sm text-gray-500 mt-1">Antrian Refund (Pengembalian Dana)</p>
         </div>
       </div>
@@ -108,7 +139,7 @@ const transactions = ref([
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
-            <tr v-for="(tx, i) in transactions" :key="i" class="hover:bg-gray-50/50 transition-colors">
+            <tr v-for="(tx, i) in recentActivities" :key="i" class="hover:bg-gray-50/50 transition-colors">
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ tx.date }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ tx.desc }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold" :class="tx.type === 'Pemasukan' ? 'text-gray-900' : 'text-red-500'">{{ tx.amount }}</td>

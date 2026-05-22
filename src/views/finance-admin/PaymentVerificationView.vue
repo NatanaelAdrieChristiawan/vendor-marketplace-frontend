@@ -1,26 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import api from '../../api/axios'
+import { ref, computed } from 'vue'
+import { useTransactions } from '../../composables/useTransactions'
 
-const transactions = ref<any[]>([])
-const isLoading = ref(true)
+const { allTransactionsQuery, verifyTransactionMutation } = useTransactions()
 const activeTab = ref('All')
 const tabs = ['All', 'Menunggu', 'Disetujui', 'Ditolak']
 
-async function fetchTransactions() {
-  try {
-    isLoading.value = true
-    const res = await api.get('/transactions/all')
-    transactions.value = res.data
-  } catch (err) {
-    console.error('Failed to fetch transactions', err)
-  } finally {
-    isLoading.value = false
-  }
-}
-
 const mappedRequests = computed(() => {
-  return transactions.value.map((tx: any) => {
+  const transactions = allTransactionsQuery.data.value || []
+  return transactions.map((tx: any) => {
     let humanStatus = 'Menunggu'
     if (tx.status === 'VERIFIED') humanStatus = 'Disetujui'
     if (tx.status === 'REJECTED') humanStatus = 'Ditolak'
@@ -69,12 +57,11 @@ async function confirmAccept() {
   if (!selectedRequest.value) return
   isActioning.value = true
   try {
-    await api.patch(`/transactions/${selectedRequest.value.id}/verify`, {
+    await verifyTransactionMutation.mutateAsync({
+      id: selectedRequest.value.id,
       status: 'VERIFIED'
     })
-    alert('Pembayaran berhasil disetujui.')
     showAcceptModal.value = false
-    await fetchTransactions()
   } catch (err: any) {
     console.error('Failed to verify transaction', err)
     alert(err.response?.data?.message || 'Gagal menyetujui transaksi.')
@@ -87,13 +74,12 @@ async function confirmReject() {
   if (!selectedRequest.value) return
   isActioning.value = true
   try {
-    await api.patch(`/transactions/${selectedRequest.value.id}/verify`, {
+    await verifyTransactionMutation.mutateAsync({
+      id: selectedRequest.value.id,
       status: 'REJECTED',
       verificationNote: rejectReason.value.trim()
     })
-    alert('Pembayaran berhasil ditolak.')
     showRejectModal.value = false
-    await fetchTransactions()
   } catch (err: any) {
     console.error('Failed to reject transaction', err)
     alert(err.response?.data?.message || 'Gagal menolak transaksi.')
@@ -106,10 +92,6 @@ function formatPrice(val: any) {
   if (!val) return 'Rp 0'
   return 'Rp ' + Number(val).toLocaleString('id-ID')
 }
-
-onMounted(() => {
-  fetchTransactions()
-})
 
 function getStatusClass(status: string) {
   switch (status) {

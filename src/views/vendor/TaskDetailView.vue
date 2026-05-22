@@ -1,20 +1,49 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api/axios'
 import { useAuth } from '../../composables/useAuth'
-import { useQueryClient } from '@tanstack/vue-query'
+import { useOrderDetail, useAcceptOrder, useCompleteOrder } from '../../composables/useOrders'
 
 const route = useRoute()
 const router = useRouter()
 const orderId = route.params.id as string
 const { uploadFile } = useAuth()
-const queryClient = useQueryClient()
 
-const order = ref<any>(null)
-const isLoading = ref(true)
+const { data: rawOrder, isLoading } = useOrderDetail(orderId)
+const acceptMutation = useAcceptOrder()
+const completeMutation = useCompleteOrder()
+
 const isSubmitting = ref(false)
 const isAccepted = ref(false)
+
+const order = computed(() => {
+  if (!rawOrder.value) return null
+  const found = rawOrder.value
+  return {
+    ...found,
+    instructions: found.requirements?.notes || 'Tidak ada instruksi khusus dari pembeli.',
+    planName: found.requirements?.plan || 'Standard Plan',
+    chosenPrice: found.requirements?.price || found.totalAmount,
+    attachments: found.requirements?.files
+      ? found.requirements.files.split(',').map((url: string) => ({
+          name: getFilename(url),
+          url: url,
+          size: 'Uploaded',
+          type: getFileExtension(url).toLowerCase()
+        }))
+      : [],
+    revisionHistory: found.revisions?.length > 0
+      ? found.revisions
+      : [{ type: 'started', label: 'PESANAN DIMULAI', time: formatDate(found.createdAt || new Date().toISOString()) }]
+  }
+})
+
+watch(order, (newVal) => {
+  if (newVal) {
+     isAccepted.value = newVal.status !== 'UNPAID' && (newVal.status !== 'IN_PROGRESS' || !!newVal.acceptedAt)
+  }
+}, { immediate: true })
 
 // Decline modal
 const showDeclineModal = ref(false)
@@ -33,7 +62,6 @@ const currentStep = computed(() => {
   if (!order.value) return 0
   switch (order.value.status) {
     case 'IN_PROGRESS': return 1
-    case 'IN_REVISION': return 1
     case 'DELIVERED': return 2
     case 'COMPLETED': return 3
     default: return 0
@@ -46,14 +74,11 @@ function getStepState(idx: number) {
   return 'pending'
 }
 
-
 function getFilename(url: string) {
   if (!url) return ''
   try {
     const parts = url.split('/')
-    const last = parts[parts.length - 1]
-    if (!last) return 'attachment'
-    return decodeURIComponent(last.split('?')[0] || '')
+    return decodeURIComponent(parts[parts.length - 1].split('?')[0])
   } catch (e) {
     return 'attachment'
   }
@@ -72,8 +97,7 @@ function formatPrice(val: any) {
 
 function formatDate(dateStr: string) {
   if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('id-ID', {
+  return new Date(dateStr).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -82,50 +106,16 @@ function formatDate(dateStr: string) {
   })
 }
 
-async function fetchOrderDetail() {
+async function handleAcceptOrder() {
   try {
-    isLoading.value = true
-    const res = await api.get('/orders/incoming')
-    const found = res.data.find((o: any) => o.id === Number(orderId))
-    if (found) {
-      isAccepted.value = found.status !== 'IN_PROGRESS' || !!found.acceptedAt
-      order.value = {
-        ...found,
-        instructions: found.requirements?.notes || 'Tidak ada instruksi khusus dari pembeli.',
-        planName: found.requirements?.plan || 'Standard Plan',
-        chosenPrice: found.requirements?.price || found.totalAmount,
-        attachments: found.requirements?.files
-          ? found.requirements.files.split(',').map((url: string) => ({
-              name: getFilename(url),
-              url: url,
-              size: 'Uploaded',
-              type: getFileExtension(url).toLowerCase()
-            }))
-          : [],
-        revisionHistory: found.revisions?.length > 0
-          ? found.revisions
-          : [{ type: 'started', label: 'PESANAN DIMULAI', time: formatDate(found.createdAt || new Date().toISOString()) }]
-      }
-    }
-  } catch (err) {
-    console.error('Failed to fetch order details', err)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-async function acceptOrder() {
-  try {
-    isLoading.value = true
-    await api.patch(`/orders/${orderId}/accept`)
-    queryClient.invalidateQueries({ queryKey: ['orders', 'incoming'] })
+    isSubmitting.value = true
+    await acceptMutation.mutateAsync(Number(orderId))
     isAccepted.value = true
     alert('Pesanan berhasil diterima!')
-    await fetchOrderDetail()
   } catch (err: any) {
     alert(err.response?.data?.message || 'Gagal menerima pesanan.')
   } finally {
-    isLoading.value = false
+    isSubmitting.value = false
   }
 }
 
@@ -135,7 +125,7 @@ function declineOrder() {
 
 async function confirmDecline() {
   try {
-    isLoading.value = true
+    isSubmitting.value = true
     showDeclineModal.value = false
     await api.patch(`/orders/${orderId}/decline`)
     alert('Pesanan berhasil ditolak.')
@@ -144,9 +134,41 @@ async function confirmDecline() {
     console.error('Failed to decline order', err)
     alert(err.response?.data?.message || 'Gagal menolak pesanan.')
   } finally {
-    isLoading.value = false
+    isSubmitting.value = false
   }
 }
+
+async function submitDelivery() {
+  if (rawFiles.value.length === 0) {
+    alert('Silakan pilih setidaknya satu file untuk dikirim.')
+    return
+  }
+  
+  try {
+    isSubmitting.value = true
+    const uploadedUrls = []
+    for (const file of rawFiles.value) {
+      const url = await uploadFile(file)
+      uploadedUrls.push(url)
+    }
+
+    await api.post(`/deliverables`, {
+      orderId: Number(orderId),
+      message: deliveryMessage.value,
+      fileUrls: uploadedUrls.join(',')
+    })
+
+    await completeMutation.mutateAsync(Number(orderId))
+    alert('Pengiriman berhasil dikirim!')
+    router.push('/vendor/finance')
+  } catch (err) {
+    console.error('Delivery failed', err)
+    alert('Gagal mengirimkan pekerjaan.')
+  } finally {
+    isSubmitting.value = false
+  }
+}
+</script>
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false

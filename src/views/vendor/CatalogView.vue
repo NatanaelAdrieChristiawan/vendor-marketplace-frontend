@@ -1,40 +1,54 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '../../api/axios'
+import { useMyGigs } from '../../composables/useGigs'
 import Toast from '../../components/ui/Toast.vue'
 
 const router = useRouter()
+const { data: rawGigs, isLoading, refetch } = useMyGigs()
 
 type GigStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'RESTRICTED'
 
-interface BackendGig {
-  id: number
-  title: string
-  description: string
-  price: string | number
-  status: string
-  mediaUrls?: string | null
-  featuredStatus?: string
-  rejectionReason?: string | null
-}
-
-interface Gig {
-  id: number
-  title: string
-  description: string
-  price: number
-  status: GigStatus
-  mediaUrls: string
-  isPromoted: boolean
-  rejectionNote?: string
-}
-
 const activeTab = ref<'all' | 'pending' | 'approved' | 'rejected' | 'draft'>('all')
-const isLoading = ref(true)
-const gigs = ref<Gig[]>([])
-const showRejectionNote = ref<number | null>(null)
 
+const gigs = computed(() => {
+  if (!rawGigs.value) return []
+  return rawGigs.value.map((g: any) => {
+    let mappedStatus: GigStatus = 'DRAFT'
+    if (g.status === 'ACTIVE' || g.status === 'FEATURED') {
+      mappedStatus = 'ACTIVE'
+    } else if (g.status === 'PENDING_APPROVAL') {
+      mappedStatus = 'PENDING'
+    } else if (g.status === 'REJECTED') {
+      mappedStatus = 'REJECTED'
+    } else if (g.status === 'PAUSED' || g.status === 'REMOVED') {
+      mappedStatus = 'RESTRICTED'
+    } else {
+      mappedStatus = 'DRAFT'
+    }
+
+    let parsedDesc = g.description
+    try {
+      const parsed = JSON.parse(g.description)
+      if (parsed && typeof parsed === 'object' && parsed.text) {
+        parsedDesc = parsed.text
+      }
+    } catch (_) {}
+
+    return {
+      id: g.id,
+      title: g.title,
+      description: parsedDesc,
+      price: typeof g.price === 'string' ? parseFloat(g.price) : g.price,
+      status: mappedStatus,
+      mediaUrls: g.mediaUrls || '',
+      isPromoted: g.featuredStatus === 'FEATURED',
+      rejectionNote: g.rejectionReason || undefined
+    }
+  })
+})
+
+const showRejectionNote = ref<number | null>(null)
 const showToast = ref(false)
 const toastData = ref({ type: 'success' as 'success' | 'info' | 'error', title: '', subtitle: '' })
 
@@ -46,57 +60,11 @@ const tabs = [
   { key: 'draft', label: 'Draf' },
 ]
 
-async function fetchMyGigs() {
-  isLoading.value = true
-  try {
-    const res = await api.get('/gigs/my-gigs')
-    const rawGigs: BackendGig[] = res.data || []
-    
-    gigs.value = rawGigs.map(g => {
-      let mappedStatus: GigStatus = 'DRAFT'
-      if (g.status === 'ACTIVE' || g.status === 'FEATURED') {
-        mappedStatus = 'ACTIVE'
-      } else if (g.status === 'PENDING_APPROVAL') {
-        mappedStatus = 'PENDING'
-      } else if (g.status === 'REJECTED') {
-        mappedStatus = 'REJECTED'
-      } else if (g.status === 'PAUSED' || g.status === 'REMOVED') {
-        mappedStatus = 'RESTRICTED'
-      } else {
-        mappedStatus = 'DRAFT'
-      }
-
-      // Parse JSON description if possible
-      let parsedDesc = g.description
-      try {
-        const parsed = JSON.parse(g.description)
-        if (parsed && typeof parsed === 'object' && parsed.text) {
-          parsedDesc = parsed.text
-        }
-      } catch (_) {}
-
-      return {
-        id: g.id,
-        title: g.title,
-        description: parsedDesc,
-        price: typeof g.price === 'string' ? parseFloat(g.price) : g.price,
-        status: mappedStatus,
-        mediaUrls: g.mediaUrls || '',
-        isPromoted: g.featuredStatus === 'FEATURED',
-        rejectionNote: g.rejectionReason || undefined
-      }
-    })
-  } catch (err) {
-    console.error('Failed to fetch my gigs', err)
-    showToastMsg('error', 'Gagal Memuat Layanan', 'Terjadi kesalahan saat menghubungi server')
-  } finally {
-    isLoading.value = false
-  }
+function showToastMsg(type: 'success' | 'info' | 'error', title: string, subtitle: string) {
+  toastData.value = { type, title, subtitle }
+  showToast.value = true
+  setTimeout(() => showToast.value = false, 3000)
 }
-
-onMounted(() => {
-  fetchMyGigs()
-})
 
 const filteredGigs = computed(() => {
   if (activeTab.value === 'all') return gigs.value
@@ -144,17 +112,11 @@ async function deleteGig(id: number) {
   try {
     await api.delete(`/gigs/${id}`)
     showToastMsg('success', 'Layanan Dihapus', 'Layanan berhasil dihapus dari katalog')
-    fetchMyGigs()
+    refetch()
   } catch (err) {
     console.error('Failed to delete gig', err)
     showToastMsg('error', 'Gagal Menghapus', 'Tidak dapat menghapus layanan dari server')
   }
-}
-
-function showToastMsg(type: 'success' | 'info' | 'error', title: string, subtitle: string) {
-  toastData.value = { type, title, subtitle }
-  showToast.value = true
-  setTimeout(() => { showToast.value = false }, 3000)
 }
 </script>
 
