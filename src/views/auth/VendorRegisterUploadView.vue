@@ -4,32 +4,46 @@ import { useRouter } from 'vue-router'
 import FileUpload from '../../components/ui/FileUpload.vue'
 import Button from '../../components/ui/Button.vue'
 import { useRegistrationStore } from '../../store/registration.store'
+import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
+const { uploadFile } = useAuth()
 const registrationStore = useRegistrationStore()
 const logoFile = ref<File | null>(null)
 const bannerFile = ref<File | null>(null)
+
+const isUploading = ref(false)
+const errorMessage = ref('')
 
 function goBack() {
   router.push('/daftar/vendor')
 }
 
 async function handleSubmit() {
-  // Convert files to Data URLs for the single trigger later
-  // In a real app, you might upload here or send FormData at the end.
-  const logoUrl = logoFile.value ? await fileToDataUrl(logoFile.value) : registrationStore.logoUrl
-  const bannerUrl = bannerFile.value ? await fileToDataUrl(bannerFile.value) : registrationStore.bannerUrl
+  isUploading.value = true
+  errorMessage.value = ''
 
-  registrationStore.setUploads({ logoUrl, bannerUrl })
-  router.push('/daftar/vendor/bank')
-}
+  try {
+    let logoUrl = registrationStore.logoUrl
+    if (logoFile.value) {
+      const res = await uploadFile(logoFile.value)
+      logoUrl = res.url
+    }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = (e) => resolve(e.target?.result as string)
-    reader.readAsDataURL(file)
-  })
+    let bannerUrl = registrationStore.bannerUrl
+    if (bannerFile.value) {
+      const res = await uploadFile(bannerFile.value)
+      bannerUrl = res.url
+    }
+
+    registrationStore.setUploads({ logoUrl, bannerUrl })
+    router.push('/daftar/vendor/bank')
+  } catch (err: any) {
+    console.error('Error uploading vendor images:', err)
+    errorMessage.value = err?.response?.data?.message || 'Gagal mengunggah gambar logo atau banner.'
+  } finally {
+    isUploading.value = false
+  }
 }
 </script>
 
@@ -55,11 +69,16 @@ function fileToDataUrl(file: File): Promise<string> {
             </template>
           </FileUpload>
 
+          <div v-if="errorMessage" class="text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 text-sm font-semibold">
+            {{ errorMessage }}
+          </div>
+
           <div class="flex items-center gap-4 mt-2">
             <button 
               type="button" 
               @click="goBack"
-              class="w-14 h-14 shrink-0 flex items-center justify-center bg-white border-2 border-brand-navy rounded-xl text-brand-navy hover:bg-gray-50 transition-colors"
+              :disabled="isUploading"
+              class="w-14 h-14 shrink-0 flex items-center justify-center bg-white border-2 border-brand-navy rounded-xl text-brand-navy hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span class="w-8 h-8 bg-brand-navy text-white rounded-full flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
@@ -68,9 +87,14 @@ function fileToDataUrl(file: File): Promise<string> {
               </span>
             </button>
             
-            <Button type="submit" variant="primary" class="flex-1 h-14 rounded-xl text-lg relative flex items-center justify-center">
-              Lanjut
-              <span class="absolute right-4 w-8 h-8 bg-white text-brand-navy rounded-full flex items-center justify-center">
+            <Button 
+              type="submit" 
+              variant="primary" 
+              :disabled="isUploading"
+              class="flex-1 h-14 rounded-xl text-lg relative flex items-center justify-center"
+            >
+              {{ isUploading ? 'Mengunggah...' : 'Lanjut' }}
+              <span v-if="!isUploading" class="absolute right-4 w-8 h-8 bg-white text-brand-navy rounded-full flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
                   <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
                 </svg>

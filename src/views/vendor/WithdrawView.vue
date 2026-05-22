@@ -16,6 +16,9 @@ const handleWithdrawClick = () => {
 const handleNumberClick = (num: number) => {
   if (pinDigits.value.length < 6) {
     pinDigits.value.push(num.toString())
+    if (pinDigits.value.length === 6) {
+      setTimeout(handleConfirm, 300)
+    }
   }
 }
 
@@ -119,8 +122,8 @@ const closePinModal = () => {
             </button>
 
             <button 
-              @click="handleConfirm"
-              class="w-16 h-16 rounded-full bg-[#10B981] text-white flex items-center justify-center hover:bg-[#059669] active:scale-90 transition-all shadow-md mx-auto"
+              @click="handleDelete"
+              class="w-16 h-16 rounded-full bg-white text-gray-900 flex items-center justify-center hover:bg-gray-100 active:scale-90 transition-all shadow-md mx-auto"
             >
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />

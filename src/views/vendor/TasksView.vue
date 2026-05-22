@@ -1,58 +1,64 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import api from '../../api/axios'
 
 const router = useRouter()
 
-type OrderStatus = 'DISPUTE_IN_PROGRESS' | 'IN_REVISION' | 'IN_PROGRESS' | 'DELIVERED'
-
-interface Order {
-  id: string
-  clientName: string
-  status: OrderStatus
-}
-
-const statusFilter = ref<'ALL' | OrderStatus>('ALL')
+const orders = ref<any[]>([])
+const isLoading = ref(true)
+const statusFilter = ref<string>('ALL')
 const showFilterDropdown = ref(false)
 
-const orders = ref<Order[]>([
-  { id: 'ORD-20240512-9901', clientName: 'Creativ Studio', status: 'DISPUTE_IN_PROGRESS' },
-  { id: 'ORD-20240512-9902', clientName: 'Creativ Studio', status: 'IN_REVISION' },
-  { id: 'ORD-20240512-9903', clientName: 'Creativ Studio', status: 'IN_PROGRESS' },
-  { id: 'ORD-20240512-9904', clientName: 'Creativ Studio', status: 'DELIVERED' },
-])
+async function fetchIncomingOrders() {
+  try {
+    isLoading.value = true
+    const res = await api.get('/orders/incoming')
+    orders.value = res.data
+  } catch (err) {
+    console.error('Failed to fetch incoming orders', err)
+  } finally {
+    isLoading.value = false
+  }
+}
 
 const filteredOrders = computed(() => {
   if (statusFilter.value === 'ALL') return orders.value
   return orders.value.filter(o => o.status === statusFilter.value)
 })
 
-const statusOptions: { key: 'ALL' | OrderStatus; label: string }[] = [
+const statusOptions = [
   { key: 'ALL', label: 'Semua Status' },
-  { key: 'DISPUTE_IN_PROGRESS', label: 'Dispute in Progress' },
-  { key: 'IN_REVISION', label: 'In Revision' },
   { key: 'IN_PROGRESS', label: 'In Progress' },
   { key: 'DELIVERED', label: 'Delivered' },
+  { key: 'IN_REVISION', label: 'In Revision' },
+  { key: 'DISPUTE_IN_PROGRESS', label: 'Dispute in Progress' },
+  { key: 'COMPLETED', label: 'Completed' },
 ]
 
-function getStatusBadge(status: OrderStatus) {
+function getStatusBadge(status: string) {
   switch (status) {
-    case 'DISPUTE_IN_PROGRESS': return { label: 'DISPUTE_IN_PROGRESS', cls: 'text-[#E05236] bg-[#FDEDE9] border-[#FADCD5]' }
-    case 'IN_REVISION': return { label: 'IN_REVISION', cls: 'text-[#C81E1E] bg-[#FDF2F2] border-[#FBD5D5]' }
-    case 'IN_PROGRESS': return { label: 'IN_PROGRESS', cls: 'text-[#D97706] bg-[#FFFBEB] border-[#FDE68A]' }
-    case 'DELIVERED': return { label: 'DELIVERED', cls: 'text-[#059669] bg-[#ECFDF5] border-[#A7F3D0]' }
+    case 'DISPUTE_IN_PROGRESS': return { label: 'Dispute', cls: 'text-[#E05236] bg-[#FDEDE9] border-[#FADCD5]' }
+    case 'IN_REVISION': return { label: 'Revisi', cls: 'text-[#C81E1E] bg-[#FDF2F2] border-[#FBD5D5]' }
+    case 'IN_PROGRESS': return { label: 'Aktif', cls: 'text-[#D97706] bg-[#FFFBEB] border-[#FDE68A]' }
+    case 'DELIVERED': return { label: 'Terkirim', cls: 'text-[#059669] bg-[#ECFDF5] border-[#A7F3D0]' }
+    case 'COMPLETED': return { label: 'Selesai', cls: 'text-emerald-700 bg-emerald-50 border-emerald-200' }
     default: return { label: status, cls: 'text-gray-500 bg-gray-50 border-gray-100' }
   }
 }
 
-function selectFilter(key: 'ALL' | OrderStatus) {
+function selectFilter(key: string) {
   statusFilter.value = key
   showFilterDropdown.value = false
 }
 
-function goToDetail(orderId: string) {
+function goToDetail(orderId: number) {
   router.push(`/vendor/orders/${orderId}`)
 }
+
+onMounted(() => {
+  fetchIncomingOrders()
+})
 </script>
 
 <template>
@@ -81,17 +87,22 @@ function goToDetail(orderId: string) {
             :key="opt.key"
             @click="selectFilter(opt.key)"
             class="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between"
-            :class="statusFilter === opt.key ? 'font-bold text-brand-navy' : 'text-gray-600'"
+            :class="statusFilter === opt.key ? 'font-bold text-indigo-900' : 'text-gray-600'"
           >
             {{ opt.label }}
-            <svg v-if="statusFilter === opt.key" class="w-4 h-4 text-brand-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            <svg v-if="statusFilter === opt.key" class="w-4 h-4 text-indigo-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
           </button>
         </div>
       </Transition>
     </div>
 
+    <!-- Loading State -->
+    <div v-if="isLoading" class="p-8 text-center bg-white rounded-2xl border border-gray-100">
+      <p class="text-gray-500 text-sm">Memuat data pesanan masuk...</p>
+    </div>
+
     <!-- Order Cards -->
-    <div class="space-y-4">
+    <div v-else class="space-y-4">
       <div
         v-for="order in filteredOrders"
         :key="order.id"
@@ -100,8 +111,9 @@ function goToDetail(orderId: string) {
       >
         <div class="flex items-start justify-between mb-4">
           <div>
-            <h3 class="text-base font-bold text-gray-900 group-hover:text-brand-navy transition-colors">{{ order.clientName }}</h3>
-            <p class="text-xs text-gray-400 font-medium mt-1">#{{ order.id }}</p>
+            <h3 class="text-base font-bold text-gray-900 group-hover:text-indigo-950 transition-colors">{{ order.gig?.title || 'Custom Order' }}</h3>
+            <p class="text-xs text-gray-500 font-medium mt-1">Pembeli: {{ order.client?.fullName || 'Unknown' }}</p>
+            <p class="text-xs text-gray-400 font-semibold mt-1">#ORD-{{ order.id }}</p>
           </div>
           <span
             class="px-3 py-1 text-xs font-bold rounded-full border"
@@ -112,7 +124,7 @@ function goToDetail(orderId: string) {
         </div>
 
         <button
-          class="px-5 py-2 bg-brand-light text-white text-xs font-bold rounded-lg hover:bg-blue-500 transition-colors shadow-sm"
+          class="px-5 py-2 bg-indigo-900 text-white text-xs font-bold rounded-lg hover:bg-indigo-850 transition-colors shadow-sm"
           @click.stop="goToDetail(order.id)"
         >
           Proses

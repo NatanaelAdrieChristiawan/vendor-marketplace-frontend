@@ -13,7 +13,7 @@ defineProps<{
         Bergabunglah dengan komunitas LayananPro dan mulailah
         melayani ribuan klien potensial di seluruh Indonesia.
       </p>
-      <router-link to="/menjadi-vendor" class="footer__cta-btn">Daftar Sebagai Vendor</router-link>
+      <router-link to="/daftar" class="footer__cta-btn">Daftar Sebagai Vendor</router-link>
     </section>
 
     <!-- Footer Links -->

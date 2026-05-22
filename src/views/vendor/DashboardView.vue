@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import Button from '../../components/ui/Button.vue'
-const merchantStatus = ref<'INCOMPLETE' | 'PENDING_VERIFICATION' | 'REJECTED' | 'VERIFIED'>('VERIFIED')
+import { useAuth } from '../../composables/useAuth'
+
+const { profileQuery } = useAuth()
+const user = computed(() => profileQuery.data.value)
+const merchantStatus = computed(() => user.value?.merchant?.status || 'INCOMPLETE')
+const fullName = computed(() => user.value?.fullName || 'User')
+const isVerified = computed(() => {
+  const s = merchantStatus.value
+  return s === 'ACTIVE' || s === 'VACATION'
+})
 const tasks = ref([
   {
     id: '#ORD-8821',
@@ -43,7 +52,7 @@ const messages = ref([
 
 <template>
   <div class="py-2 relative">
-    <div v-if="merchantStatus !== 'VERIFIED'" class="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[8px]">
+    <div v-if="!isVerified" class="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[8px]">
       <div class="flex items-center gap-6">
         <div class="w-24 h-24 rounded-full bg-black flex items-center justify-center text-white text-[56px] font-bold leading-none">
           <span v-if="merchantStatus === 'REJECTED'" class="text-red-500">!</span>
@@ -68,7 +77,7 @@ const messages = ref([
     </div>
 
     <div class="mb-8">
-      <h1 class="text-[28px] font-bold text-gray-900">Welcome back, Budi</h1>
+      <h1 class="text-[28px] font-bold text-gray-900">Welcome back, {{ fullName }}</h1>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

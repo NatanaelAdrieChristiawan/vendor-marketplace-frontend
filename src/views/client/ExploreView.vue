@@ -1,29 +1,56 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import api from '../../api/axios'
 
-const selectedCategory = ref('Creative Studio')
+interface Category {
+  id: number
+  name: string
+  commissionRate: string
+}
+
+interface BackendGig {
+  id: number
+  title: string
+  description: string
+  price: string | number
+  mediaUrls: string | null
+  status: string
+  merchant: {
+    shopName: string
+    user: {
+      fullName: string
+    }
+  }
+  category: {
+    id: number
+    name: string
+  }
+  createdAt: string
+}
+
+interface Product {
+  id: number
+  title: string
+  vendor: string
+  avatar: string
+  rating: number
+  price: number
+  image: string
+  categoryId: number
+  categoryName: string
+  createdAt: string
+}
+
+const selectedCategoryId = ref<number | null>(null)
 const sortBy = ref('popular')
 const showSortDropdown = ref(false)
-const priceMin = ref('100000')
-const priceMax = ref('200000')
+const priceMin = ref('0')
+const priceMax = ref('5000000')
 const selectedRatings = ref<number[]>([])
 
-const categories = [
-  'Creative Studio',
-  'Event Essentials',
-  'Digital Marketing',
-  'Tech & Dev',
-  'Audio & Music',
-]
-
-const products = [
-  { id: 1, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 2, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 3, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 4, title: 'Desain Produk Untuk Bisnis', vendor: 'Sarah Design', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 5, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 6, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-]
+const categories = ref<Category[]>([])
+const allGigs = ref<Product[]>([])
+const isLoading = ref(true)
 
 function formatPrice(val: number) {
   return 'Rp ' + val.toLocaleString('id-ID')
@@ -47,11 +74,90 @@ const sortLabel: Record<string, string> = {
   rating: 'Rating Tertinggi',
 }
 
+async function loadData() {
+  isLoading.value = true
+  try {
+    const [catRes, gigRes] = await Promise.all([
+      api.get('/categories'),
+      api.get('/gigs')
+    ])
+
+    categories.value = catRes.data || []
+    
+    const rawGigs: BackendGig[] = gigRes.data || []
+    allGigs.value = rawGigs.map(g => {
+      // safe fallback if description is JSON
+      let textDesc = g.description
+      try {
+        const parsed = JSON.parse(g.description)
+        if (parsed && parsed.text) {
+          textDesc = parsed.text
+        }
+      } catch (_) {}
+
+      // Mock rating based on gig ID to keep it deterministic but realistic
+      const rating = 4.5 + (g.id % 6) * 0.1
+
+      return {
+        id: g.id,
+        title: g.title,
+        vendor: g.merchant?.shopName || g.merchant?.user?.fullName || 'Vendor',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(g.merchant?.shopName || 'Vendor')}&background=random`,
+        rating: parseFloat(rating.toFixed(1)),
+        price: typeof g.price === 'string' ? parseFloat(g.price) : g.price,
+        image: g.mediaUrls || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+        categoryId: g.category?.id,
+        categoryName: g.category?.name || 'Lainnya',
+        createdAt: g.createdAt,
+        description: textDesc
+      }
+    })
+  } catch (err) {
+    console.error('Failed to load explore data', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
 onMounted(() => {
+  loadData()
+
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target) } })
   }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' })
   document.querySelectorAll('.anim-in').forEach((el) => observer.observe(el))
+})
+
+const products = computed(() => {
+  let list = [...allGigs.value]
+
+  // Category filter
+  if (selectedCategoryId.value !== null) {
+    list = list.filter(p => p.categoryId === selectedCategoryId.value)
+  }
+
+  // Price filter
+  const minVal = parseFloat(priceMin.value) || 0
+  const maxVal = parseFloat(priceMax.value) || Infinity
+  list = list.filter(p => p.price >= minVal && p.price <= maxVal)
+
+  // Rating filter
+  if (selectedRatings.value.length > 0) {
+    const minRating = Math.min(...selectedRatings.value)
+    list = list.filter(p => p.rating >= minRating)
+  }
+
+  // Sorting
+  if (sortBy.value === 'newest') {
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  } else if (sortBy.value === 'cheapest') {
+    list.sort((a, b) => a.price - b.price)
+  } else if (sortBy.value === 'rating') {
+    list.sort((a, b) => b.rating - a.rating)
+  }
+  // 'popular' keeps the default backend order
+
+  return list
 })
 </script>
 
@@ -88,10 +194,15 @@ onMounted(() => {
           <!-- Category Filter -->
           <div class="filter-group">
             <h3 class="filter-group__title">Kategori Jasa</h3>
-            <label v-for="cat in categories" :key="cat" class="filter-check">
-              <input type="checkbox" :value="cat" :checked="selectedCategory === cat" @change="selectedCategory = cat" />
+            <label class="filter-check">
+              <input type="checkbox" :checked="selectedCategoryId === null" @change="selectedCategoryId = null" />
               <span class="filter-check__mark"></span>
-              <span class="filter-check__label">{{ cat }}</span>
+              <span class="filter-check__label">Semua Kategori</span>
+            </label>
+            <label v-for="cat in categories" :key="cat.id" class="filter-check">
+              <input type="checkbox" :checked="selectedCategoryId === cat.id" @change="selectedCategoryId = cat.id" />
+              <span class="filter-check__mark"></span>
+              <span class="filter-check__label">{{ cat.name }}</span>
             </label>
           </div>
 
@@ -127,7 +238,21 @@ onMounted(() => {
 
         <!-- Product Grid -->
         <div class="products">
-          <div class="products__grid">
+          <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 text-gray-500 w-full">
+            <svg class="animate-spin h-8 w-8 text-blue-500 mb-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-sm font-semibold">Memuat daftar jasa...</p>
+          </div>
+
+          <div v-else-if="products.length === 0" class="flex flex-col items-center justify-center py-20 text-gray-500 w-full text-center">
+            <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <p class="text-base font-bold text-gray-700 mb-1">Tidak ada jasa ditemukan</p>
+            <p class="text-xs text-gray-400">Coba ubah filter atau rentang harga pencarian Anda</p>
+          </div>
+
+          <div v-else class="products__grid">
             <router-link
               v-for="(p, idx) in products"
               :key="p.id"
@@ -144,7 +269,7 @@ onMounted(() => {
               </div>
               <div class="product-card__body">
                 <div class="product-card__vendor">
-                  <div class="product-card__avatar"></div>
+                  <div class="product-card__avatar" :style="`background-image: url(${p.avatar}); background-size: cover; background-position: center;`"></div>
                   <div>
                     <h3 class="product-card__title">{{ p.title }}</h3>
                     <span class="product-card__vendor-name">{{ p.vendor }}</span>

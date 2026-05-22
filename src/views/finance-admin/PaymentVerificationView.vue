@@ -1,19 +1,50 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import api from '../../api/axios'
 
+const transactions = ref<any[]>([])
+const isLoading = ref(true)
 const activeTab = ref('All')
 const tabs = ['All', 'Menunggu', 'Disetujui', 'Ditolak']
 
-const requests = ref([
-  { id: 1, pemohon: 'User A', status: 'Disetujui', vendor: 'Creative Studio', email: 'creativs@untitledui.com', total: 'Rp120.000', bank: 'Bank Mandiri (VA)', paymentId: 'PAY-99201' },
-  { id: 2, pemohon: 'User B', status: 'Menunggu', vendor: 'Event Essentials', email: 'creativs@untitledui.com', total: 'Rp500.000', bank: 'BCA (Manual)', paymentId: 'PAY-99202' },
-  { id: 3, pemohon: 'User C', status: 'Menunggu', vendor: 'Tech & Digital', email: 'creativs@untitledui.com', total: 'Rp250.000', bank: 'BNI (VA)', paymentId: 'PAY-99203' },
-  { id: 4, pemohon: 'User D', status: 'Ditolak', vendor: 'Merch Apparel', email: 'creativs@untitledui.com', total: 'Rp1.200.000', bank: 'BRI (Manual)', paymentId: 'PAY-99204' },
-])
+async function fetchTransactions() {
+  try {
+    isLoading.value = true
+    const res = await api.get('/transactions/all')
+    transactions.value = res.data
+  } catch (err) {
+    console.error('Failed to fetch transactions', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const mappedRequests = computed(() => {
+  return transactions.value.map((tx: any) => {
+    let humanStatus = 'Menunggu'
+    if (tx.status === 'VERIFIED') humanStatus = 'Disetujui'
+    if (tx.status === 'REJECTED') humanStatus = 'Ditolak'
+    
+    return {
+      id: tx.id,
+      orderId: tx.orderId,
+      pemohon: tx.user?.fullName || `User #${tx.userId}`,
+      email: tx.user?.email || '-',
+      status: humanStatus,
+      rawStatus: tx.status,
+      total: tx.amount,
+      bank: tx.proofUrl ? 'Manual Transfer' : 'Midtrans',
+      paymentId: `TX-${tx.id}`,
+      proofUrl: tx.proofUrl,
+      verificationNote: tx.verificationNote,
+      createdAt: tx.createdAt
+    }
+  })
+})
 
 const filteredRequests = computed(() => {
-  if (activeTab.value === 'All') return requests.value
-  return requests.value.filter(r => r.status === activeTab.value)
+  if (activeTab.value === 'All') return mappedRequests.value
+  return mappedRequests.value.filter(r => r.status === activeTab.value)
 })
 
 // Modal State
@@ -21,6 +52,7 @@ const showAcceptModal = ref(false)
 const showRejectModal = ref(false)
 const selectedRequest = ref<any>(null)
 const rejectReason = ref('')
+const isActioning = ref(false)
 
 function openAccept(req: any) {
   selectedRequest.value = req
@@ -33,27 +65,51 @@ function openReject(req: any) {
   showRejectModal.value = true
 }
 
-function confirmAccept() {
-  if (selectedRequest.value) {
-    const idx = requests.value.findIndex(r => r.id === selectedRequest.value.id)
-    if (idx !== -1) {
-      const req = requests.value[idx]
-      if (req) req.status = 'Disetujui'
-    }
+async function confirmAccept() {
+  if (!selectedRequest.value) return
+  isActioning.value = true
+  try {
+    await api.patch(`/transactions/${selectedRequest.value.id}/verify`, {
+      status: 'VERIFIED'
+    })
+    alert('Pembayaran berhasil disetujui.')
+    showAcceptModal.value = false
+    await fetchTransactions()
+  } catch (err: any) {
+    console.error('Failed to verify transaction', err)
+    alert(err.response?.data?.message || 'Gagal menyetujui transaksi.')
+  } finally {
+    isActioning.value = false
   }
-  showAcceptModal.value = false
 }
 
-function confirmReject() {
-  if (selectedRequest.value) {
-    const idx = requests.value.findIndex(r => r.id === selectedRequest.value.id)
-    if (idx !== -1) {
-      const req = requests.value[idx]
-      if (req) req.status = 'Ditolak'
-    }
+async function confirmReject() {
+  if (!selectedRequest.value) return
+  isActioning.value = true
+  try {
+    await api.patch(`/transactions/${selectedRequest.value.id}/verify`, {
+      status: 'REJECTED',
+      verificationNote: rejectReason.value.trim()
+    })
+    alert('Pembayaran berhasil ditolak.')
+    showRejectModal.value = false
+    await fetchTransactions()
+  } catch (err: any) {
+    console.error('Failed to reject transaction', err)
+    alert(err.response?.data?.message || 'Gagal menolak transaksi.')
+  } finally {
+    isActioning.value = false
   }
-  showRejectModal.value = false
 }
+
+function formatPrice(val: any) {
+  if (!val) return 'Rp 0'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
+
+onMounted(() => {
+  fetchTransactions()
+})
 
 function getStatusClass(status: string) {
   switch (status) {
@@ -96,13 +152,18 @@ function getStatusDotClass(status: string) {
       </button>
     </div>
 
+    <!-- Loading State -->
+    <div v-if="isLoading" class="p-8 text-center bg-white rounded-xl border border-gray-100">
+      <p class="text-gray-500 text-sm">Memuat data transaksi...</p>
+    </div>
+
     <!-- Table Container -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div v-else class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       
       <!-- Badge User Count -->
       <div class="p-5 border-b border-gray-100 flex items-center">
         <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100">
-          {{ filteredRequests.length }} User
+          {{ filteredRequests.length }} Transaksi
         </span>
       </div>
 
@@ -113,8 +174,9 @@ function getStatusDotClass(status: string) {
             <tr class="bg-white border-b border-gray-100 text-xs font-semibold text-gray-500">
               <th class="px-6 py-4">Nama Pemohon</th>
               <th class="px-6 py-4">Status <span class="text-gray-400">↓</span></th>
-              <th class="px-6 py-4">Vendor <span class="text-gray-400">?</span></th>
+              <th class="px-6 py-4">Nominal Tagihan</th>
               <th class="px-6 py-4">Email</th>
+              <th class="px-6 py-4">Tipe Bayar</th>
               <th class="px-6 py-4 text-center">Aksi</th>
             </tr>
           </thead>
@@ -130,23 +192,26 @@ function getStatusDotClass(status: string) {
                 </span>
               </td>
               <td class="px-6 py-5">
-                <span class="text-sm font-bold text-gray-700">{{ req.vendor }}</span>
+                <span class="text-sm font-bold text-gray-700">{{ formatPrice(req.total) }}</span>
               </td>
               <td class="px-6 py-5">
-                <span class="text-sm font-bold text-gray-700">{{ req.email }}</span>
+                <span class="text-sm font-medium text-gray-600">{{ req.email }}</span>
+              </td>
+              <td class="px-6 py-5">
+                <span class="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-700">{{ req.bank }}</span>
               </td>
               <td class="px-6 py-5">
                 <div class="flex items-center justify-center gap-3">
                   <button 
                     @click="openAccept(req)"
-                    :disabled="req.status === 'Disetujui'"
+                    :disabled="req.rawStatus !== 'PENDING'"
                     class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-md transition-colors"
                   >
                     Terima
                   </button>
                   <button 
                     @click="openReject(req)"
-                    :disabled="req.status === 'Ditolak'"
+                    :disabled="req.rawStatus !== 'PENDING'"
                     class="px-4 py-1.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-md transition-colors"
                   >
                     Tolak
@@ -154,29 +219,13 @@ function getStatusDotClass(status: string) {
                 </div>
               </td>
             </tr>
+            <tr v-if="filteredRequests.length === 0">
+              <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-500">
+                Tidak ada transaksi ditemukan
+              </td>
+            </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- Pagination -->
-      <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white">
-        <button class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-          <span>←</span> Previous
-        </button>
-        
-        <div class="flex items-center gap-1">
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-sm font-bold text-gray-900">1</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">2</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">3</button>
-          <span class="w-8 h-8 flex items-center justify-center text-gray-400">...</span>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">8</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">9</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">10</button>
-        </div>
-
-        <button class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-          Next <span>→</span>
-        </button>
       </div>
 
     </div>
@@ -205,34 +254,40 @@ function getStatusDotClass(status: string) {
 
             <!-- Data Box -->
             <div class="border border-gray-200 rounded-xl p-5 space-y-3">
-              <p class="font-bold text-gray-900 mb-4">Data Pembayaran:</p>
+              <p class="font-bold text-gray-900 mb-2">Data Pembayaran:</p>
               <ul class="space-y-3 text-sm text-gray-800 font-medium">
-                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> Vendor: <span class="underline">{{ selectedRequest.vendor }}</span></li>
-                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> ID: {{ selectedRequest.paymentId }}</li>
-                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> Total: {{ selectedRequest.total }}</li>
-                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> Bank: {{ selectedRequest.bank }}</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> Pemohon: {{ selectedRequest.pemohon }}</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> ID Transaksi: {{ selectedRequest.paymentId }}</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> Total: {{ formatPrice(selectedRequest.total) }}</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-gray-800 rounded-full"></span> Tipe: {{ selectedRequest.bank }}</li>
               </ul>
             </div>
 
             <!-- Bukti Attachment -->
             <div class="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
               <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
-                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 overflow-hidden">
+                  <img v-if="selectedRequest.proofUrl" :src="selectedRequest.proofUrl" class="w-full h-full object-cover" alt="Proof" />
+                  <svg v-else class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 </div>
                 <div>
-                  <p class="font-bold text-sm text-gray-900">Foto bukti pembayaran</p>
-                  <p class="text-xs text-gray-400 mt-0.5">1.2 MB</p>
+                  <p class="font-bold text-sm text-gray-900">Bukti Pembayaran</p>
+                  <p class="text-xs text-gray-400 mt-0.5" v-if="selectedRequest.proofUrl">Klik tombol di samping untuk melihat ukuran penuh</p>
+                  <p class="text-xs text-gray-400 mt-0.5" v-else>Tidak ada berkas bukti diunggah</p>
                 </div>
               </div>
-              <button class="text-gray-400 hover:text-gray-600 transition-colors">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              </button>
+              <a v-if="selectedRequest.proofUrl" :href="selectedRequest.proofUrl" target="_blank" class="text-gray-400 hover:text-indigo-600 transition-colors" title="Buka di tab baru">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+              </a>
             </div>
 
-            <div class="flex justify-end mt-2">
-              <button @click="confirmAccept" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors">
-                Terima
+            <div class="flex justify-end gap-3 mt-2">
+              <button @click="showAcceptModal = false" class="px-5 py-2.5 border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors">
+                Batal
+              </button>
+              <button @click="confirmAccept" :disabled="isActioning" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors">
+                <span v-if="isActioning">Memproses...</span>
+                <span v-else>Setujui</span>
               </button>
             </div>
           </div>
@@ -249,29 +304,29 @@ function getStatusDotClass(status: string) {
           </div>
 
           <div class="p-6 space-y-6 flex-1 flex flex-col">
-            <button @click="showRejectModal = false" class="text-gray-600 hover:text-gray-900 transition-colors self-start">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-            </button>
-
-            <p class="text-gray-600 text-sm font-medium">Berikan alasan yang jelas agar customer dapat melakukan perbaikan data.</p>
+            <p class="text-gray-600 text-sm font-medium">Berikan alasan penolakan yang jelas agar customer dapat memahami alasannya.</p>
             
             <div class="space-y-2 flex-1 flex flex-col">
-              <label class="font-bold text-gray-900 text-sm">Catatan</label>
+              <label class="font-bold text-gray-900 text-sm">Alasan Penolakan</label>
               <textarea 
                 v-model="rejectReason"
                 rows="5"
                 class="w-full border border-gray-200 rounded-xl p-4 text-sm focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 resize-none flex-1 placeholder-gray-400"
-                placeholder="Tulis instruksi perbaikan untuk customer di sini..."
+                placeholder="Tulis alasan penolakan di sini..."
               ></textarea>
             </div>
 
-            <div class="flex justify-end mt-4">
+            <div class="flex justify-end gap-3 mt-4">
+              <button @click="showRejectModal = false" class="px-5 py-2.5 border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors">
+                Batal
+              </button>
               <button 
                 @click="confirmReject" 
-                :disabled="!rejectReason.trim()"
+                :disabled="!rejectReason.trim() || isActioning"
                 class="px-8 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors"
               >
-                Tolak
+                <span v-if="isActioning">Memproses...</span>
+                <span v-else>Tolak</span>
               </button>
             </div>
           </div>

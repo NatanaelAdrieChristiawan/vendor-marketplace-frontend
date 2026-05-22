@@ -122,13 +122,13 @@ const unreadMessages = ref([
           </span>
         </div>
 
-        <div class="bg-white rounded-2xl p-5 border border-gray-50 shadow-sm relative overflow-hidden">
+        <div v-for="(msg, index) in unreadMessages" :key="index" class="bg-white rounded-2xl p-5 border border-gray-50 shadow-sm relative overflow-hidden">
           <div class="flex justify-between items-start mb-2">
-            <h4 class="text-sm font-bold text-gray-900">Andi</h4>
-            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">14:22</span>
+            <h4 class="text-sm font-bold text-gray-900">{{ msg.name }}</h4>
+            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{{ msg.time }}</span>
           </div>
           <p class="text-xs text-gray-500 line-clamp-1 leading-relaxed">
-            Misi bang, boleh buat penawaran khus...
+            {{ msg.text }}
           </p>
         </div>
 

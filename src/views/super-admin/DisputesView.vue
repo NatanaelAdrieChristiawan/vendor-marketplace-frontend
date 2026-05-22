@@ -92,11 +92,11 @@ const activeTab = ref('Log Aktivitas') // 'Bukti' | 'Log Aktivitas'
           <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </div>
-          <input type="text" placeholder="cari nama toko atau ID..." class="block w-full pl-11 pr-4 py-3 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+          <input v-model="searchQuery" type="text" placeholder="cari nama toko atau ID..." class="block w-full pl-11 pr-4 py-3 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
         </div>
         <div class="flex gap-4">
           <div class="relative">
-            <select class="appearance-none bg-white border border-gray-300 text-gray-700 py-3 pl-5 pr-10 rounded-full text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <select v-model="selectedStatus" class="appearance-none bg-white border border-gray-300 text-gray-700 py-3 pl-5 pr-10 rounded-full text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-500">
               <option>Semua Status</option>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
@@ -104,7 +104,7 @@ const activeTab = ref('Log Aktivitas') // 'Bukti' | 'Log Aktivitas'
             </div>
           </div>
           <div class="relative">
-            <select class="appearance-none bg-white border border-gray-300 text-gray-700 py-3 pl-5 pr-10 rounded-full text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <select v-model="selectedPriority" class="appearance-none bg-white border border-gray-300 text-gray-700 py-3 pl-5 pr-10 rounded-full text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-500">
               <option>Semua Prioritas</option>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
