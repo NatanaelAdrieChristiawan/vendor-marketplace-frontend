@@ -16,14 +16,16 @@ const isLoading = ref(true)
 const isSending = ref(false)
 
 const messagesContainer = ref<HTMLElement | null>(null)
+const messageTrigger = ref(0)
 
 const activeChannel = computed(() => {
   return channels.value.find(c => c.id === activeChannelId.value) || null
 })
 
 const chatMessages = computed(() => {
+  messageTrigger.value
   if (!activeChannel.value) return []
-  return activeChannel.value.state.messages
+  return [...activeChannel.value.state.messages]
 })
 
 function getOtherMember(channel: any) {
@@ -34,6 +36,7 @@ function getOtherMember(channel: any) {
 }
 
 const chatsList = computed(() => {
+  messageTrigger.value
   return channels.value.map((channel: any) => {
     const otherUser = getOtherMember(channel)
     const lastMsgObj = channel.state.messages[channel.state.messages.length - 1]
@@ -128,16 +131,25 @@ async function selectChannel(channelId: string) {
   const channel = channels.value.find(c => c.id === channelId)
   if (channel) {
     await channel.markRead()
+    messageTrigger.value++
     await scrollToBottom()
   }
 }
 
-function handleGlobalMessageNew() {
+function handleGlobalMessageNew(event: any) {
   queryChannelsListOnly()
+  const cid = event?.channel_id || event?.channel?.id
+  if (cid === activeChannelId.value) {
+    messageTrigger.value++
+  }
 }
 
-function handleGlobalMessageUpdated() {
+function handleGlobalMessageUpdated(event: any) {
   queryChannelsListOnly()
+  const cid = event?.channel_id || event?.channel?.id
+  if (cid === activeChannelId.value) {
+    messageTrigger.value++
+  }
 }
 
 async function queryChannelsListOnly() {
@@ -156,6 +168,7 @@ async function sendMessage() {
       text: messageText.value
     })
     messageText.value = ''
+    messageTrigger.value++
     await scrollToBottom()
   } catch (err) {
     console.error('Failed to send message:', err)

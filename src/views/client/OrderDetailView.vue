@@ -1,17 +1,41 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api/axios'
-import { useQueryClient } from '@tanstack/vue-query'
+import { useOrderById, useCompleteOrder, useSubmitReview } from '../../composables/useOrders'
 
 const route = useRoute()
 const router = useRouter()
 const orderId = route.params.id as string
-const queryClient = useQueryClient()
 
-const order = ref<any>(null)
-const isLoading = ref(true)
-const status = ref('')
+const { data: rawOrder, isLoading: isQueryLoading } = useOrderById(orderId)
+const isProcessing = ref(false)
+const isLoading = computed(() => isQueryLoading.value || isProcessing.value)
+
+const order = computed(() => {
+  if (!rawOrder.value) return null
+  return {
+    ...rawOrder.value,
+    instructions: rawOrder.value.requirements?.notes || 'Tidak ada instruksi khusus dari pembeli.',
+    planName: rawOrder.value.requirements?.plan || 'Standard Plan',
+    chosenPrice: rawOrder.value.requirements?.price || rawOrder.value.totalAmount,
+    requirementsFile: rawOrder.value.requirements?.files || null
+  }
+})
+
+const status = computed(() => {
+  if (!order.value) return ''
+  const s = order.value.status
+  if (s === 'IN_PROGRESS' || s === 'IN_REVISION' || s === 'DISPUTE_IN_PROGRESS') {
+    return 'in-progress'
+  } else if (s === 'DELIVERED') {
+    return 'delivered'
+  } else if (s === 'COMPLETED') {
+    return 'completed'
+  } else {
+    return s.toLowerCase()
+  }
+})
 
 const countdown = ref({ days: '00', hours: '00', minutes: '00' })
 const deadline = ref('')
@@ -20,6 +44,9 @@ const rating = ref(5)
 const reviewText = ref('')
 const selectedTip = ref('10%')
 const tipOptions = ['5%', '10%', '15%', 'Kustom']
+
+const completeOrderMutation = useCompleteOrder()
+const submitReviewMutation = useSubmitReview()
 
 function getFilename(url: string) {
   if (!url) return ''
@@ -84,59 +111,29 @@ function startCountdown(targetDate: Date) {
   timerInterval = setInterval(update, 60000)
 }
 
-async function fetchOrderDetail() {
-  try {
-    isLoading.value = true
-    const res = await api.get('/orders/my-orders')
-    const found = res.data.find((o: any) => o.id === Number(orderId))
-    if (found) {
-      order.value = {
-        ...found,
-        instructions: found.requirements?.notes || 'Tidak ada instruksi khusus dari pembeli.',
-        planName: found.requirements?.plan || 'Standard Plan',
-        chosenPrice: found.requirements?.price || found.totalAmount,
-        requirementsFile: found.requirements?.files || null
-      }
-
-      if (found.status === 'IN_PROGRESS' || found.status === 'IN_REVISION' || found.status === 'DISPUTE_IN_PROGRESS') {
-        status.value = 'in-progress'
-      } else if (found.status === 'DELIVERED') {
-        status.value = 'delivered'
-      } else if (found.status === 'COMPLETED') {
-        status.value = 'completed'
-      } else {
-        status.value = found.status.toLowerCase()
-      }
-
-      if (found.deadline) {
-        deadline.value = formatDate(found.deadline)
-        startCountdown(new Date(found.deadline))
-      }
-
-      if (found.review) {
-        rating.value = found.review.rating
-        reviewText.value = found.review.comment || ''
-      }
-    }
-  } catch (err) {
-    console.error('Failed to load order details', err)
-  } finally {
-    isLoading.value = false
+watch(() => order.value?.deadline, (newVal) => {
+  if (newVal) {
+    deadline.value = formatDate(newVal)
+    startCountdown(new Date(newVal))
   }
-}
+}, { immediate: true })
+
+watch(() => order.value?.review, (newVal) => {
+  if (newVal) {
+    rating.value = newVal.rating
+    reviewText.value = newVal.comment || ''
+  }
+}, { immediate: true })
 
 async function completeOrder() {
   try {
-    isLoading.value = true
-    await api.patch(`/orders/${orderId}/complete`)
-    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
-    queryClient.invalidateQueries({ queryKey: ['orders', 'my'] })
+    isProcessing.value = true
+    await completeOrderMutation.mutateAsync(orderId)
     alert('Pesanan berhasil diselesaikan!')
-    await fetchOrderDetail()
   } catch (err: any) {
     alert(err.response?.data?.message || 'Gagal menyelesaikan pesanan.')
   } finally {
-    isLoading.value = false
+    isProcessing.value = false
   }
 }
 
@@ -158,19 +155,17 @@ async function downloadInvoice() {
 
 async function submitReview() {
   try {
-    isLoading.value = true
-    await api.post('/reviews', {
+    isProcessing.value = true
+    await submitReviewMutation.mutateAsync({
       orderId: Number(orderId),
       rating: rating.value,
       comment: reviewText.value
     })
-    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
     alert('Ulasan berhasil dikirim!')
-    await fetchOrderDetail()
   } catch (err: any) {
     alert(err.response?.data?.message || 'Gagal mengirim ulasan.')
   } finally {
-    isLoading.value = false
+    isProcessing.value = false
   }
 }
 
@@ -184,8 +179,7 @@ function initObserver() {
 function goBack() { router.push('/pesanan') }
 function goRevision() { router.push(`/pesanan/${orderId}/revisi`) }
 
-onMounted(async () => {
-  await fetchOrderDetail()
+onMounted(() => {
   initObserver()
 })
 

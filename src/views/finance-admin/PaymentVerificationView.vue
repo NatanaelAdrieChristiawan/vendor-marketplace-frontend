@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useTransactions } from '../../composables/useTransactions'
 
 const { allTransactionsQuery, verifyTransactionMutation } = useTransactions()
+const isLoading = allTransactionsQuery.isLoading
 const activeTab = ref('All')
 const tabs = ['All', 'Menunggu', 'Disetujui', 'Ditolak']
 
@@ -32,7 +33,7 @@ const mappedRequests = computed(() => {
 
 const filteredRequests = computed(() => {
   if (activeTab.value === 'All') return mappedRequests.value
-  return mappedRequests.value.filter(r => r.status === activeTab.value)
+  return mappedRequests.value.filter((r: any) => r.status === activeTab.value)
 })
 
 // Modal State

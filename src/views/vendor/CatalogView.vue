@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMyGigs } from '../../composables/useGigs'
 import Toast from '../../components/ui/Toast.vue'
+import api from '../../api/axios'
 
 const router = useRouter()
 const { data: rawGigs, isLoading, refetch } = useMyGigs()
@@ -74,7 +75,7 @@ const filteredGigs = computed(() => {
     rejected: ['REJECTED'],
     draft: ['DRAFT'],
   }
-  return gigs.value.filter(g => map[activeTab.value]?.includes(g.status))
+  return gigs.value.filter((g: any) => map[activeTab.value]?.includes(g.status))
 })
 
 function formatPrice(n: number) {

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
-import api from '../../api/axios'
+import { useUserDetail, useUserChatLogs } from '../../composables/useUsers'
 
 const router = useRouter()
 const route = useRoute()
@@ -10,23 +9,8 @@ const userId = route.params.id as string
 
 const activeTab = ref('log-chat')
 
-const userQuery = useQuery({
-  queryKey: ['user', userId],
-  queryFn: async () => {
-    const res = await api.get(`/users/${userId}`)
-    return res.data
-  },
-  enabled: computed(() => !!userId)
-})
-
-const chatLogsQuery = useQuery({
-  queryKey: ['chat-logs', userId],
-  queryFn: async () => {
-    const res = await api.get(`/chat/logs?userId=${userId}`)
-    return res.data
-  },
-  enabled: computed(() => !!userId)
-})
+const userQuery = useUserDetail(userId)
+const chatLogsQuery = useUserChatLogs(userId)
 
 const user = computed(() => userQuery.data.value)
 const chatLogs = computed(() => chatLogsQuery.data.value || [])
@@ -47,7 +31,7 @@ function goBack() {
     </div>
 
     <!-- User Profile Card -->
-    <div class="bg-white rounded-[20px] shadow-sm border border-gray-100 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+    <div class="bg-white rounded-[20px] shadow-sm border border-gray-150 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
       <div v-if="!user" class="text-sm text-gray-400">Memuat data pengguna...</div>
       <template v-else>
         <div class="flex items-center gap-5">
@@ -91,8 +75,9 @@ function goBack() {
     <!-- Tab Content: Log Chat -->
     <div v-if="activeTab === 'log-chat'" class="space-y-4 pt-2">
       <div v-for="log in chatLogs" :key="log.id" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4 hover:shadow-md transition-shadow cursor-default">
-        <img :src="user?.avatar || `https://i.pravatar.cc/150?u=${userId}`" alt="Avatar" class="w-10 h-10 rounded-full object-cover border border-gray-100 shrink-0" />
+        <img :src="log.senderAvatar || user?.avatar || `https://i.pravatar.cc/150?u=${userId}`" alt="Avatar" class="w-10 h-10 rounded-full object-cover border border-gray-100 shrink-0" />
         <div class="flex-1 pt-2">
+          <div class="text-xs font-bold text-gray-400 mb-1">{{ log.senderName }}</div>
           <p class="text-gray-800 font-bold text-[15px]">{{ log.message || log.content }}</p>
         </div>
         <div class="text-sm font-medium text-gray-400 pt-2 shrink-0">

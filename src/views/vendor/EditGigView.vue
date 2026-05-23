@@ -17,9 +17,7 @@ const gig = computed(() => {
   return myGigs.value.find((g: any) => String(g.id) === String(gigId))
 })
 
-// Mock reviews since BE doesn't have review fetch endpoint yet
 const reviews = ref<any[]>([])
-const isReviewsLoading = ref(false)
 
 const title = computed(() => gig.value?.title || 'Memuat...')
 

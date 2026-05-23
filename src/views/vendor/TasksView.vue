@@ -11,8 +11,9 @@ const showFilterDropdown = ref(false)
 
 const filteredOrders = computed(() => {
   if (!orders.value) return []
-  if (statusFilter.value === 'ALL') return orders.value
-  return orders.value.filter((o: any) => o.status === statusFilter.value)
+  const activeOrders = orders.value.filter((o: any) => o.status !== 'UNPAID' && o.status !== 'CANCELLED')
+  if (statusFilter.value === 'ALL') return activeOrders
+  return activeOrders.filter((o: any) => o.status === statusFilter.value)
 })
 
 const statusOptions = [
@@ -40,7 +41,9 @@ function selectFilter(key: string) {
   showFilterDropdown.value = false
 }
 
-// Removed onMounted manual fetch
+function goToDetail(orderId: number) {
+  router.push(`/vendor/orders/${orderId}`)
+}
 </script>
 
 <template>

@@ -19,15 +19,17 @@ const { data: notifications } = useNotifications()
 const acceptOrderMutation = useAcceptOrder()
 
 const tasks = computed(() => {
-  return incomingOrders.value?.map((o: any) => ({
-    id: o.id,
-    orderId: `#ORD-${o.id}`,
-    title: o.gig?.title || 'Pesanan Khusus',
-    user: o.client?.fullName || 'Pembeli',
-    avatar: `https://ui-avatars.com/api/?name=${o.client?.fullName || 'User'}&background=random`,
-    time: 'Baru',
-    status: o.status === 'PAID_PENDING_CONFIRMATION' ? 'BARU' : o.status,
-  })) || []
+  return incomingOrders.value
+    ?.filter((o: any) => o.status !== 'UNPAID' && o.status !== 'CANCELLED')
+    .map((o: any) => ({
+      id: o.id,
+      orderId: `#ORD-${o.id}`,
+      title: o.gig?.title || 'Pesanan Khusus',
+      user: o.client?.fullName || 'Pembeli',
+      avatar: `https://ui-avatars.com/api/?name=${o.client?.fullName || 'User'}&background=random`,
+      time: 'Baru',
+      status: o.status === 'PAID_PENDING_CONFIRMATION' ? 'BARU' : o.status,
+    })) || []
 })
 
 const messageList = computed(() => {
@@ -43,7 +45,9 @@ const messageList = computed(() => {
 
 const unreadCount = computed(() => notifications.value?.filter((n: any) => !n.isRead).length || 0)
 
-const activeOrdersCount = computed(() => incomingOrders.value?.length || 0)
+const activeOrdersCount = computed(() => {
+  return incomingOrders.value?.filter((o: any) => o.status !== 'UNPAID' && o.status !== 'CANCELLED').length || 0
+})
 
 async function handleAccept(id: number) {
   try {

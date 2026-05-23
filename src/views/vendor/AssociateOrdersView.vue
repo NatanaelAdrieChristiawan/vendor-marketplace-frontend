@@ -2,16 +2,18 @@
 import { ref, computed } from 'vue'
 import { useIncomingOrders } from '../../composables/useOrders'
 
-const { data: incomingOrders, isLoading } = useIncomingOrders()
+const { data: incomingOrders } = useIncomingOrders()
 
 const orders = computed(() => {
-  return incomingOrders.value?.map((o: any) => ({
-    id: o.id,
-    client: o.client?.fullName || 'Pembeli',
-    orderNo: `#ORD-${o.id}`,
-    status: o.status === 'PAID_PENDING_CONFIRMATION' ? 'Baru' : o.status,
-    statusColor: o.status === 'PAID_PENDING_CONFIRMATION' ? 'bg-blue-50 text-blue-500' : 'bg-green-50 text-green-500'
-  })) || []
+  return incomingOrders.value
+    ?.filter((o: any) => o.status !== 'UNPAID' && o.status !== 'CANCELLED')
+    .map((o: any) => ({
+      id: o.id,
+      client: o.client?.fullName || 'Pembeli',
+      orderNo: `#ORD-${o.id}`,
+      status: o.status === 'PAID_PENDING_CONFIRMATION' ? 'Baru' : o.status,
+      statusColor: o.status === 'PAID_PENDING_CONFIRMATION' ? 'bg-blue-50 text-blue-500' : 'bg-green-50 text-green-500'
+    })) || []
 })
 
 const filterOpen = ref(false)

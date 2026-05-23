@@ -43,3 +43,14 @@ export function useGigsList(params?: { categoryId?: number; limit?: number; q?: 
     }
   })
 }
+
+export function useReviews(gigId: string | number) {
+  return useQuery({
+    queryKey: ['reviews', String(gigId)],
+    queryFn: async () => {
+      const res = await api.get(`/reviews?gigId=${gigId}`)
+      return Array.isArray(res.data) ? res.data : res.data.data || []
+    },
+    enabled: computed(() => !!gigId)
+  })
+}

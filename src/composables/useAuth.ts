@@ -71,7 +71,6 @@ export function useAuth() {
         email: payload.email,
         password: payload.password,
         fullName: payload.username,
-        role: payload.role === 'MERCHANT' ? 'MERCHANT_OWNER' : 'CLIENT'
       }
       const response = await api.post('/users', apiPayload)
       return { ...response.data, originalPayload: payload }

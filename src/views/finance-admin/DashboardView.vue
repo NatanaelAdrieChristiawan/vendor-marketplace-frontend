@@ -21,6 +21,19 @@ const approvedRefundsCount = computed(() => {
   return (refundsQuery.data.value || []).length
 })
 
+const totalEscrow = computed(() => {
+  const txs = allTransactionsQuery.data.value || []
+  const verifiedTxs = txs.filter((t: any) => t.status === 'VERIFIED')
+  return verifiedTxs.reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+})
+
+const todayEscrow = computed(() => {
+  const txs = allTransactionsQuery.data.value || []
+  const today = new Date().toDateString()
+  const todayVerifiedTxs = txs.filter((t: any) => t.status === 'VERIFIED' && new Date(t.createdAt).toDateString() === today)
+  return todayVerifiedTxs.reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+})
+
 const recentActivities = computed(() => {
   const txs = (allTransactionsQuery.data.value || []).slice(0, 5).map((t: any) => ({
     date: new Date(t.createdAt).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' }),
@@ -106,11 +119,11 @@ function formatPrice(val: any) {
           <span class="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">↑ 0,8 %</span>
         </div>
         <div class="mt-4">
-          <p class="text-2xl font-bold">Rp 450.500</p>
+          <p class="text-2xl font-bold">{{ formatPrice(totalEscrow) }}</p>
           <p class="text-white/80 text-sm mt-0.5">Saldo Escrow</p>
         </div>
         <div class="mt-3 pt-3 border-t border-white/20">
-          <p class="text-lg font-bold">Rp 320.000</p>
+          <p class="text-lg font-bold">{{ formatPrice(todayEscrow) }}</p>
           <p class="text-white/70 text-xs">Hari Ini</p>
         </div>
       </div>

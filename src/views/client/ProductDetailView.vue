@@ -1,26 +1,23 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import api from '../../api/axios'
 import Toast from '../../components/ui/Toast.vue'
+import { useGigDetail, useReviews } from '../../composables/useGigs'
+import api from '../../api/axios'
 
 const route = useRoute()
 const router = useRouter()
-const productId = route.params.id
+const productId = route.params.id as string
 
 type PlanKey = 'basic' | 'standard' | 'premium'
 const selectedPlan = ref<PlanKey>('standard')
-const gig = ref<any>(null)
-const isLoading = ref(true)
+
+const { data: gig, isLoading } = useGigDetail(productId)
+const { data: reviews } = useReviews(productId)
 
 const showToast = ref(false)
 const toastData = ref({ type: 'success' as 'success' | 'info' | 'error', title: '', subtitle: '' })
 
-function showToastMsg(type: 'success' | 'info' | 'error', title: string, subtitle: string) {
-  toastData.value = { type, title, subtitle }
-  showToast.value = true
-  setTimeout(() => { showToast.value = false }, 3000)
-}
 
 const plans = ref<Record<PlanKey, { name: string; price: string; features: string[] }>>({
   basic: { name: 'Paket Basic', price: 'Rp0', features: [] },
@@ -69,75 +66,73 @@ const descriptionText = computed(() => {
   }
 })
 
-async function fetchGigDetail() {
+watch(gig, (newVal) => {
+  if (!newVal) return
+  let descJson: any = null
   try {
-    isLoading.value = true
-    const res = await api.get(`/gigs/details/${productId}`)
-    gig.value = res.data
-    
-    // Parse description JSON
-    let descJson: any = null
-    try {
-      descJson = JSON.parse(res.data.description)
-    } catch (e) {
-      // Legacy text format
-    }
-
-    const basePrice = typeof res.data.price === 'string' ? parseFloat(res.data.price) : res.data.price
-
-    if (descJson && descJson.tiers) {
-      plans.value = {
-        basic: {
-          name: descJson.tiers.basic?.name || 'Paket Basic',
-          price: formatRupiah(descJson.tiers.basic?.price),
-          features: parseFeatures(descJson.tiers.basic?.features)
-        },
-        standard: {
-          name: descJson.tiers.standard?.name || 'Paket Standard',
-          price: formatRupiah(descJson.tiers.standard?.price || basePrice),
-          features: parseFeatures(descJson.tiers.standard?.features)
-        },
-        premium: {
-          name: descJson.tiers.premium?.name || 'Paket Premium',
-          price: formatRupiah(descJson.tiers.premium?.price),
-          features: parseFeatures(descJson.tiers.premium?.features)
-        }
-      }
-      extraImages.value = descJson.extraMedia || []
-    } else {
-      plans.value = {
-        basic: {
-          name: 'Paket Basic',
-          price: formatRupiah(basePrice * 0.6),
-          features: ['Pengiriman Cepat', 'Revisi 1x', 'Desain Standard']
-        },
-        standard: {
-          name: 'Paket Standard',
-          price: formatRupiah(basePrice),
-          features: ['Pengiriman Cepat', 'Revisi 3x', 'Desain Professional', 'File Sumber (PSD/Figma)']
-        },
-        premium: {
-          name: 'Paket Premium',
-          price: formatRupiah(basePrice * 1.8),
-          features: ['Pengiriman Super Cepat', 'Revisi Unlimited', 'Desain Premium Kualitas Tinggi', 'File Sumber', 'Hak Komersial']
-        }
-      }
-      extraImages.value = []
-    }
-  } catch (err) {
-    console.error(err)
-    showToastMsg('error', 'Gagal Memuat Detail', 'Layanan tidak dapat dimuat dari server')
-  } finally {
-    isLoading.value = false
+    descJson = JSON.parse(newVal.description)
+  } catch (e) {
   }
-}
+
+  const basePrice = typeof newVal.price === 'string' ? parseFloat(newVal.price) : newVal.price
+
+  if (descJson && descJson.tiers) {
+    plans.value = {
+      basic: {
+        name: descJson.tiers.basic?.name || 'Paket Basic',
+        price: formatRupiah(descJson.tiers.basic?.price),
+        features: parseFeatures(descJson.tiers.basic?.features)
+      },
+      standard: {
+        name: descJson.tiers.standard?.name || 'Paket Standard',
+        price: formatRupiah(descJson.tiers.standard?.price || basePrice),
+        features: parseFeatures(descJson.tiers.standard?.features)
+      },
+      premium: {
+        name: descJson.tiers.premium?.name || 'Paket Premium',
+        price: formatRupiah(descJson.tiers.premium?.price),
+        features: parseFeatures(descJson.tiers.premium?.features)
+      }
+    }
+    extraImages.value = descJson.extraMedia || []
+  } else {
+    plans.value = {
+      basic: {
+        name: 'Paket Basic',
+        price: formatRupiah(basePrice * 0.6),
+        features: ['Pengiriman Cepat', 'Revisi 1x', 'Desain Standard']
+      },
+      standard: {
+        name: 'Paket Standard',
+        price: formatRupiah(basePrice),
+        features: ['Pengiriman Cepat', 'Revisi 3x', 'Desain Professional', 'File Sumber (PSD/Figma)']
+      },
+      premium: {
+        name: 'Paket Premium',
+        price: formatRupiah(basePrice * 1.8),
+        features: ['Pengiriman Super Cepat', 'Revisi Unlimited', 'Desain Premium Kualitas Tinggi', 'File Sumber', 'Hak Komersial']
+      }
+    }
+    extraImages.value = []
+  }
+}, { immediate: true })
 
 function navigateToOrder() {
   router.push({
     name: 'OrderConfirmation',
-    params: { id: productId as string },
+    params: { id: productId },
     query: { plan: selectedPlan.value }
   })
+}
+
+async function contactSeller() {
+  try {
+    await api.post('/chat/create-channel', { gigId: Number(productId) })
+    router.push('/chat')
+  } catch (err: any) {
+    console.error('Failed to create chat channel', err)
+    alert(err.response?.data?.message || 'Gagal menghubungi penjual.')
+  }
 }
 
 const compareTable = computed(() => {
@@ -151,24 +146,26 @@ const compareTable = computed(() => {
   ]
 })
 
-const reviews = ref<any[]>([])
+let observer: IntersectionObserver | null = null
 
-async function fetchReviews() {
-  try {
-    const res = await api.get(`/reviews?gigId=${productId}`)
-    reviews.value = Array.isArray(res.data) ? res.data : res.data.data || []
-  } catch (err) {
-    reviews.value = []
-  }
-}
-
-onMounted(async () => {
-  await Promise.all([fetchGigDetail(), fetchReviews()])
-
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target) } })
+onMounted(() => {
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible')
+        observer?.unobserve(e.target)
+      }
+    })
   }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' })
-  document.querySelectorAll('.anim-in').forEach((el) => observer.observe(el))
+  document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+})
+
+watch(isLoading, (loading) => {
+  if (!loading) {
+    nextTick(() => {
+      document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+    })
+  }
 })
 </script>
 
@@ -323,7 +320,7 @@ onMounted(async () => {
                 </ul>
 
                 <button class="pricing-card__cta" @click="navigateToOrder">Pesan Sekarang</button>
-                <button class="pricing-card__contact">Hubungi Penjual</button>
+                <button class="pricing-card__contact" @click="contactSeller">Hubungi Penjual</button>
 
                 <p class="pricing-card__note">
                   Pesan dengan aman. Pembayaran Anda akan ditahan oleh platform hingga pesanan selesai.

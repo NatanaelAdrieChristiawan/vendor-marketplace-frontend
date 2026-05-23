@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useUsers } from '../../composables/useUsers'
+import { useSystemConfig } from '../../composables/useSystemConfig'
 
 const { data: rawUsers, isLoading } = useUsers()
+const { auditLogsQuery } = useSystemConfig()
 
 const showAddModal = ref(false)
 const searchQuery = ref('')
 const selectedStatus = ref('all')
 const selectedRole = ref('all')
 
-// Form data for new admin
 const newAdmin = ref({
   name: '',
   email: '',
@@ -19,6 +20,11 @@ const newAdmin = ref({
 const currentView = ref('list')
 const selectedAdmin = ref<any>(null)
 const showDeleteModal = ref(false)
+
+const adminLogs = computed(() => {
+  if (!auditLogsQuery.data.value || !selectedAdmin.value) return []
+  return auditLogsQuery.data.value.filter((log: any) => log.userId === selectedAdmin.value.id)
+})
 
 function openDetail(admin: any) {
   selectedAdmin.value = admin
@@ -383,47 +389,27 @@ function getRoleColor(role: string) {
       <!-- Audit Log -->
       <div>
         <h3 class="text-lg font-bold text-[#1E3A8A] mb-4">Audit log</h3>
-        <div class="space-y-4">
-          <!-- Log 1 -->
-          <div class="bg-white border border-gray-200 rounded-2xl p-6 flex gap-4 shadow-sm">
-            <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-800 font-medium shrink-0">
-              M
+        <div v-if="auditLogsQuery.isLoading.value" class="py-8 text-center text-sm text-gray-400">
+          Memuat log audit...
+        </div>
+        <div v-else-if="adminLogs.length === 0" class="py-8 text-center text-sm text-gray-400">
+          Belum ada log aktivitas tercatat untuk admin ini.
+        </div>
+        <div v-else class="space-y-4">
+          <div v-for="log in adminLogs" :key="log.id" class="bg-white border border-gray-200 rounded-2xl p-6 flex gap-4 shadow-sm">
+            <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-800 font-bold shrink-0">
+              {{ (log.user?.fullName || 'A').charAt(0) }}
             </div>
             <div>
               <div class="flex items-center gap-3 mb-2">
-                <span class="px-3 py-1 bg-gray-100 border border-gray-400 rounded-full text-xs font-medium text-gray-700">Pembaruan Sistem</span>
+                <span class="px-3 py-1 bg-gray-100 border border-gray-400 rounded-full text-xs font-medium text-gray-700">
+                  {{ log.action }}
+                </span>
+                <span class="text-xs text-gray-400">{{ new Date(log.createdAt).toLocaleString('id-ID') }}</span>
               </div>
-              <h4 class="text-base font-bold text-gray-900 mt-1">Perubahan komisi platform dari 5% menjadi 7%</h4>
-            </div>
-          </div>
-          
-          <!-- Log 2 -->
-          <div class="bg-white border border-gray-200 rounded-2xl p-6 flex gap-4 shadow-sm">
-            <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-800 font-medium shrink-0">
-              M
-            </div>
-            <div>
-              <div class="flex items-center gap-3 mb-2">
-                <span class="px-3 py-1 bg-green-50 border border-green-400 rounded-full text-xs font-medium text-green-600">Disetujui</span>
-                <span class="text-[13px] text-gray-400 font-medium">10:30 AM</span>
-              </div>
-              <h4 class="text-base font-bold text-gray-900 mt-1">memverifikasi vendor "CreativeStudioID"</h4>
-              <p class="text-sm text-gray-600 mt-0.5">Banding vendor diterima setelah review log validator.</p>
-            </div>
-          </div>
-
-          <!-- Log 3 -->
-          <div class="bg-white border border-gray-200 rounded-2xl p-6 flex gap-4 shadow-sm">
-            <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-800 font-medium shrink-0">
-              M
-            </div>
-            <div>
-              <div class="flex items-center gap-3 mb-2">
-                <span class="px-3 py-1 bg-orange-50 border border-orange-400 rounded-full text-xs font-medium text-orange-600">Suspend</span>
-                <span class="text-[13px] text-gray-400 font-medium">10:30 AM</span>
-              </div>
-              <h4 class="text-base font-bold text-gray-900 mt-1">Admin memblokir vendor EventMaster Studio</h4>
-              <p class="text-sm text-gray-600 mt-0.5">Laporan pelanggaran transaksi oleh client.</p>
+              <h4 class="text-base font-bold text-gray-900 mt-1">
+                Mengubah {{ log.key }} dari "{{ log.oldValue || '-' }}" menjadi "{{ log.newValue }}"
+              </h4>
             </div>
           </div>
         </div>

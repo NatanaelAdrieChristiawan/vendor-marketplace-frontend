@@ -1,27 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '../../api/axios'
+import { useMyOrders } from '../../composables/useOrders'
 
 const router = useRouter()
 const searchQuery = ref('')
 const activeFilter = ref('semua')
 const filters = ['Semua', 'Menunggu', 'Selesai']
 
-const orders = ref<any[]>([])
-const isLoading = ref(true)
-
-async function fetchOrders() {
-  try {
-    isLoading.value = true
-    const res = await api.get('/orders/my-orders')
-    orders.value = res.data
-  } catch (err) {
-    console.error('Failed to fetch orders', err)
-  } finally {
-    isLoading.value = false
-  }
-}
+const { data: rawOrders, isLoading } = useMyOrders()
+const orders = computed(() => rawOrders.value || [])
 
 function isWaitingStatus(status: string) {
   return ['UNPAID', 'PAID_PENDING_CONFIRMATION', 'IN_PROGRESS', 'DELIVERED', 'IN_REVISION', 'DISPUTE_IN_PROGRESS'].includes(status)
@@ -57,14 +45,14 @@ const filteredOrders = computed(() => {
   let result = orders.value
   if (activeFilter.value !== 'semua') {
     if (activeFilter.value === 'menunggu') {
-      result = result.filter(o => isWaitingStatus(o.status))
+      result = result.filter((o: any) => isWaitingStatus(o.status))
     } else if (activeFilter.value === 'selesai') {
-      result = result.filter(o => isFinishedStatus(o.status))
+      result = result.filter((o: any) => isFinishedStatus(o.status))
     }
   }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
-    result = result.filter(o =>
+    result = result.filter((o: any) =>
       String(o.id).toLowerCase().includes(q) ||
       (o.gig?.title && o.gig.title.toLowerCase().includes(q)) ||
       (o.merchant?.shopName && o.merchant.shopName.toLowerCase().includes(q))
@@ -82,9 +70,7 @@ function goToChat() {
   router.push('/chat')
 }
 
-onMounted(async () => {
-  await fetchOrders()
-  
+onMounted(() => {
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => {
       if (e.isIntersecting) {
@@ -133,7 +119,7 @@ onMounted(async () => {
             v-for="(order, idx) in filteredOrders"
             :key="order.id"
             class="order-card anim-in visible"
-            :style="{ transitionDelay: `${(idx + 2) * 80}ms` }"
+            :style="{ transitionDelay: `${(Number(idx) + 2) * 80}ms` }"
           >
             <div class="order-card__top">
               <div class="order-card__id-row">

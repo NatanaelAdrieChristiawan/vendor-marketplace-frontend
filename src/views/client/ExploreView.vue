@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCategories } from '../../composables/useCategories'
 import { useGigsList } from '../../composables/useGigs'
@@ -11,17 +11,35 @@ const showSortDropdown = ref(false)
 const priceMin = ref('0')
 const priceMax = ref('5000000')
 const selectedRatings = ref<number[]>([])
+const searchQuery = ref(route.query.q ? String(route.query.q) : '')
 
 const { data: categoriesData } = useCategories()
 const { data: gigList, isLoading } = useGigsList()
 
-// Sync query param categoryId if changes
 watch(() => route.query.categoryId, (newVal) => {
   if (newVal) selectedCategoryId.value = Number(newVal)
 })
 
+watch(() => route.query.q, (newVal) => {
+  searchQuery.value = newVal ? String(newVal) : ''
+})
+
 function formatPrice(val: number) {
   return 'Rp ' + val.toLocaleString('id-ID')
+}
+
+function selectCategory(id: number | null) {
+  if (selectedCategoryId.value === id) {
+    selectedCategoryId.value = null
+  } else {
+    selectedCategoryId.value = id
+  }
+}
+
+function parseNumericPrice(val: string | number) {
+  if (typeof val === 'number') return val
+  const cleaned = String(val).replace(/[^0-9]/g, '')
+  return parseFloat(cleaned) || 0
 }
 
 function toggleRating(star: number) {
@@ -35,6 +53,10 @@ function selectSort(value: string) {
   showSortDropdown.value = false
 }
 
+const closeSortDropdown = () => {
+  showSortDropdown.value = false
+}
+
 const sortLabel: Record<string, string> = {
   popular: 'Populer',
   newest: 'Terbaru',
@@ -42,11 +64,31 @@ const sortLabel: Record<string, string> = {
   rating: 'Rating Tertinggi',
 }
 
+let observer: IntersectionObserver | null = null
+
 onMounted(() => {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target) } })
+  window.addEventListener('click', closeSortDropdown)
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible')
+        observer?.unobserve(e.target)
+      }
+    })
   }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' })
-  document.querySelectorAll('.anim-in').forEach((el) => observer.observe(el))
+  document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', closeSortDropdown)
+})
+
+watch(isLoading, (loading) => {
+  if (!loading) {
+    nextTick(() => {
+      document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+    })
+  }
 })
 
 const products = computed(() => {
@@ -57,7 +99,6 @@ const products = computed(() => {
     let price = parseFloat(g.price)
     let image = g.mediaUrls
     
-    // Attempt to parse JSON description for more accurate data if available
     try {
       if (g.description && (g.description.startsWith('{') || g.description.startsWith('['))) {
         const parsed = JSON.parse(g.description)
@@ -66,7 +107,6 @@ const products = computed(() => {
         }
       }
     } catch (e) {
-      // Not JSON, use fallback
     }
 
     return {
@@ -74,7 +114,7 @@ const products = computed(() => {
       title: title,
       vendor: g.merchant?.shopName || 'Vendor',
       avatar: g.merchant?.logoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(g.merchant?.shopName || 'Vendor')}&background=random`,
-      rating: 5.0, // Placeholder as BE doesn't provide avgRating yet
+      rating: 5.0,
       price: price,
       image: image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
       categoryId: g.categoryId,
@@ -83,47 +123,45 @@ const products = computed(() => {
     }
   })
 
-  // Category filter
-  if (selectedCategoryId.value !== null) {
-    list = list.filter(p => p.categoryId === selectedCategoryId.value)
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter((p: any) =>
+      p.title.toLowerCase().includes(q) ||
+      p.categoryName.toLowerCase().includes(q) ||
+      p.vendor.toLowerCase().includes(q)
+    )
   }
 
-  // Price filter
-  const minVal = parseFloat(priceMin.value) || 0
-  const maxVal = parseFloat(priceMax.value) || Infinity
-  list = list.filter(p => p.price >= minVal && p.price <= maxVal)
+  if (selectedCategoryId.value !== null) {
+    list = list.filter((p: any) => p.categoryId === selectedCategoryId.value)
+  }
 
-  // Rating filter
+  const minVal = parseNumericPrice(priceMin.value)
+  const maxVal = priceMax.value === '' ? Infinity : parseNumericPrice(priceMax.value)
+  list = list.filter((p: any) => p.price >= minVal && p.price <= maxVal)
+
   if (selectedRatings.value.length > 0) {
     const minRating = Math.min(...selectedRatings.value)
-    list = list.filter(p => p.rating >= minRating)
+    list = list.filter((p: any) => p.rating >= minRating)
   }
 
-  // Sorting
   if (sortBy.value === 'popular') {
-    // Just keep default or sort by rating
-    list.sort((a, b) => b.rating - a.rating)
+    list.sort((a: any, b: any) => b.rating - a.rating)
   } else if (sortBy.value === 'newest') {
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    list.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   } else if (sortBy.value === 'cheapest') {
-    list.sort((a, b) => a.price - b.price)
+    list.sort((a: any, b: any) => a.price - b.price)
   } else if (sortBy.value === 'rating') {
-    list.sort((a, b) => b.rating - a.rating)
+    list.sort((a: any, b: any) => b.rating - a.rating)
   }
 
   return list
 })
-</script>
-  if (sortBy.value === 'newest') {
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  } else if (sortBy.value === 'cheapest') {
-    list.sort((a, b) => a.price - b.price)
-  } else if (sortBy.value === 'rating') {
-    list.sort((a, b) => b.rating - a.rating)
-  }
-  // 'popular' keeps the default backend order
 
-  return list
+watch(products, () => {
+  nextTick(() => {
+    document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+  })
 })
 </script>
 
@@ -157,22 +195,27 @@ const products = computed(() => {
             <span>Filter</span>
           </div>
 
-          <!-- Category Filter -->
+          <div class="filter-group">
+            <h3 class="filter-group__title">Cari Jasa</h3>
+            <div class="filter-search-box">
+              <input type="text" v-model="searchQuery" placeholder="Cari kata kunci..." class="filter-search-input" />
+            </div>
+          </div>
+
           <div class="filter-group">
             <h3 class="filter-group__title">Kategori Jasa</h3>
             <label class="filter-check">
-              <input type="checkbox" :checked="selectedCategoryId === null" @change="selectedCategoryId = null" />
+              <input type="checkbox" :checked="selectedCategoryId === null" @change="selectCategory(null)" />
               <span class="filter-check__mark"></span>
               <span class="filter-check__label">Semua Kategori</span>
             </label>
             <label v-for="cat in categoriesData" :key="cat.id" class="filter-check">
-              <input type="checkbox" :checked="selectedCategoryId === cat.id" @change="selectedCategoryId = cat.id" />
+              <input type="checkbox" :checked="selectedCategoryId === cat.id" @change="selectCategory(cat.id)" />
               <span class="filter-check__mark"></span>
               <span class="filter-check__label">{{ cat.name }}</span>
             </label>
           </div>
 
-          <!-- Price Filter -->
           <div class="filter-group">
             <h3 class="filter-group__title">Range Harga</h3>
             <input type="range" min="0" max="5000000" step="50000" v-model="priceMax" class="filter-range" />
@@ -188,11 +231,10 @@ const products = computed(() => {
             </div>
           </div>
 
-          <!-- Rating Filter -->
           <div class="filter-group">
             <h3 class="filter-group__title">Rating Minimum</h3>
             <label v-for="star in [5, 4, 3, 2]" :key="star" class="filter-check">
-              <input type="checkbox" :value="star" @change="toggleRating(star)" />
+              <input type="checkbox" :checked="selectedRatings.includes(star)" @change="toggleRating(star)" />
               <span class="filter-check__mark"></span>
               <span class="filter-check__stars">
                 <svg v-for="s in 5" :key="s" width="14" height="14" viewBox="0 0 24 24" :fill="s <= star ? '#F59E0B' : '#D1D5DB'" :stroke="s <= star ? '#F59E0B' : '#D1D5DB'" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -224,7 +266,7 @@ const products = computed(() => {
               :key="p.id"
               :to="`/jelajahi/${p.id}`"
               class="product-card anim-in"
-              :style="{ transitionDelay: `${(idx % 3) * 80 + 100}ms` }"
+              :style="{ transitionDelay: `${(Number(idx) % 3) * 80 + 100}ms` }"
             >
               <div class="product-card__img-wrapper">
                 <img :src="p.image" :alt="p.title" class="product-card__img" loading="lazy" />
@@ -357,5 +399,26 @@ const products = computed(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .anim-in, .product-card, .product-card__img { transition: none; }
+}
+
+.filter-search-box {
+  display: flex;
+  align-items: center;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 0.375rem 0.75rem;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+.filter-search-box:focus-within {
+  border-color: #3B5BDB;
+}
+.filter-search-input {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 0.8125rem;
+  color: #374151;
+  background: transparent;
 }
 </style>

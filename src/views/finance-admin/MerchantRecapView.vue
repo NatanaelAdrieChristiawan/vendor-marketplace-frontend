@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useMerchants } from '../../composables/useMerchants'
 
 const router = useRouter()
-const { data: rawMerchants, isLoading } = useMerchants()
+const { data: rawMerchants } = useMerchants()
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const currentPage = ref(1)
@@ -26,10 +26,10 @@ const filteredMerchants = computed(() => {
   let result = merchants.value
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
-    result = result.filter(m => m.name.toLowerCase().includes(q))
+    result = result.filter((m: any) => m.name.toLowerCase().includes(q))
   }
   if (statusFilter.value !== 'all') {
-    result = result.filter(m => m.status === statusFilter.value)
+    result = result.filter((m: any) => m.status === statusFilter.value)
   }
   return result
 })

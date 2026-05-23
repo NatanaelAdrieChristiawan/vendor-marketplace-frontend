@@ -30,7 +30,7 @@ const stats = computed(() => [
   },
   {
     label: 'Pesanan Aktif',
-    value: incomingOrders.value?.length || 0,
+    value: incomingOrders.value?.filter((o: any) => o.status !== 'UNPAID' && o.status !== 'CANCELLED').length || 0,
     icon: 'briefcase',
     bgColor: 'bg-green-50',
     iconColor: 'text-green-400'
@@ -38,11 +38,13 @@ const stats = computed(() => [
 ])
 
 const tasks = computed(() => {
-  return incomingOrders.value?.map((o: any) => ({
-    id: `#ORD-${o.id}`,
-    customer: o.client?.fullName || 'Pembeli',
-    status: o.status
-  })) || []
+  return incomingOrders.value
+    ?.filter((o: any) => o.status !== 'UNPAID' && o.status !== 'CANCELLED')
+    .map((o: any) => ({
+      id: `#ORD-${o.id}`,
+      customer: o.client?.fullName || 'Pembeli',
+      status: o.status
+    })) || []
 })
 
 const unreadCount = computed(() => notifications.value?.filter((n: any) => !n.isRead).length || 0)

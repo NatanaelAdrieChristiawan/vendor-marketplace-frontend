@@ -2,9 +2,13 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUsers } from '../../composables/useUsers'
+import { useMerchants } from '../../composables/useMerchants'
+import { useAdmin } from '../../composables/useAdmin'
 
 const router = useRouter()
 const { data: rawUsers, isLoading } = useUsers()
+const { data: rawMerchants } = useMerchants()
+const { suspendMerchantMutation } = useAdmin()
 
 const searchQuery = ref('')
 const statusFilter = ref('all')
@@ -35,6 +39,11 @@ const selectedUser = ref<any>(null)
 const selectedDuration = ref('3')
 const suspendNote = ref('')
 
+const selectedMerchant = computed(() => {
+  if (!selectedUser.value || !rawMerchants.value) return null
+  return rawMerchants.value.find((m: any) => m.userId === selectedUser.value.id) || null
+})
+
 function openDetail(user: any) {
   selectedUser.value = user
   showDetailModal.value = true
@@ -60,11 +69,27 @@ function closeSuspendConfirm() {
   suspendNote.value = ''
 }
 
-function submitSuspend() {
-  if (selectedUser.value) {
-    // Call API here if needed, but for now just local update or close
+async function submitSuspend() {
+  if (selectedUser.value && selectedMerchant.value) {
+    await suspendMerchantMutation.mutateAsync({
+      id: selectedMerchant.value.id,
+      isSuspended: true,
+      reason: suspendNote.value,
+      days: selectedDuration.value === 'permanent' ? 0 : Number(selectedDuration.value)
+    })
   }
   closeSuspendConfirm()
+  closeDetail()
+}
+
+async function submitUnsuspend() {
+  if (selectedUser.value && selectedMerchant.value) {
+    await suspendMerchantMutation.mutateAsync({
+      id: selectedMerchant.value.id,
+      isSuspended: false,
+      reason: 'Pencabutan suspend oleh admin'
+    })
+  }
   closeDetail()
 }
 </script>
@@ -202,7 +227,7 @@ function submitSuspend() {
         </button>
 
         <!-- Durasi Suspend -->
-        <div class="w-full grid grid-cols-2 gap-3 mt-4">
+        <div v-if="selectedUser?.status === 'Active'" class="w-full grid grid-cols-2 gap-3 mt-4">
           <button 
             @click="selectedDuration = '3'"
             class="flex flex-col items-center justify-center p-4 border rounded-xl transition-all"
@@ -229,8 +254,11 @@ function submitSuspend() {
           </button>
         </div>
 
-        <button @click="openSuspendConfirm" class="w-full bg-[#E53E3E] hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl transition-colors text-sm uppercase tracking-wide shadow-sm mt-auto">
+        <button v-if="selectedUser?.status === 'Active'" @click="openSuspendConfirm" class="w-full bg-[#E53E3E] hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl transition-colors text-sm uppercase tracking-wide shadow-sm mt-auto">
           Suspend Akun
+        </button>
+        <button v-else @click="submitUnsuspend" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 px-4 rounded-xl transition-colors text-sm uppercase tracking-wide shadow-sm mt-auto">
+          Cabut Suspend
         </button>
       </div>
     </div>

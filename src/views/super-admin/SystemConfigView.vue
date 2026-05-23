@@ -120,14 +120,14 @@ function handleAddCategory() {
     })
     newCategoryName.value = ''
     newCategoryCommission.value = 5
-    await fetchCategories()
+    await refetchCategories()
   })
 }
 
 function handleDeleteCategory(id: number) {
   openSecurityModal(async () => {
     await api.delete(`/categories/${id}`)
-    await fetchCategories()
+    await refetchCategories()
   })
 }
 

@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryClient } from '@tanstack/vue-query'
 import api from '../../api/axios'
 import { useAuth } from '../../composables/useAuth'
-import { useOrderDetail, useAcceptOrder, useCompleteOrder } from '../../composables/useOrders'
+import { useOrderDetail, useAcceptOrder } from '../../composables/useOrders'
 
 const route = useRoute()
 const router = useRouter()
 const orderId = route.params.id as string
 const { uploadFile } = useAuth()
+const queryClient = useQueryClient()
 
 const { data: rawOrder, isLoading } = useOrderDetail(orderId)
 const acceptMutation = useAcceptOrder()
-const completeMutation = useCompleteOrder()
 
 const isSubmitting = ref(false)
 const isAccepted = ref(false)
@@ -45,17 +46,14 @@ watch(order, (newVal) => {
   }
 }, { immediate: true })
 
-// Decline modal
 const showDeclineModal = ref(false)
 const declineReason = ref('')
 
-// Delivery form
 const deliveryFiles = ref<{ name: string; size: string }[]>([])
 const rawFiles = ref<File[]>([])
 const deliveryMessage = ref('')
 const isDragging = ref(false)
 
-// Status stepper
 const steps = ['Dibayar', 'Pengerjaan', 'Dikirim', 'Selesai']
 
 const currentStep = computed(() => {
@@ -78,7 +76,9 @@ function getFilename(url: string) {
   if (!url) return ''
   try {
     const parts = url.split('/')
-    return decodeURIComponent(parts[parts.length - 1].split('?')[0])
+    const lastPart = parts[parts.length - 1]
+    const segment = lastPart ? lastPart.split('?')[0] : null
+    return segment ? decodeURIComponent(segment) : 'attachment'
   } catch (e) {
     return 'attachment'
   }
@@ -106,12 +106,13 @@ function formatDate(dateStr: string) {
   })
 }
 
-async function handleAcceptOrder() {
+async function acceptOrder() {
   try {
     isSubmitting.value = true
     await acceptMutation.mutateAsync(Number(orderId))
     isAccepted.value = true
     alert('Pesanan berhasil diterima!')
+    queryClient.invalidateQueries({ queryKey: ['orders', 'incoming'] })
   } catch (err: any) {
     alert(err.response?.data?.message || 'Gagal menerima pesanan.')
   } finally {
@@ -129,6 +130,7 @@ async function confirmDecline() {
     showDeclineModal.value = false
     await api.patch(`/orders/${orderId}/decline`)
     alert('Pesanan berhasil ditolak.')
+    queryClient.invalidateQueries({ queryKey: ['orders', 'incoming'] })
     router.push('/vendor/orders')
   } catch (err: any) {
     console.error('Failed to decline order', err)
@@ -137,38 +139,6 @@ async function confirmDecline() {
     isSubmitting.value = false
   }
 }
-
-async function submitDelivery() {
-  if (rawFiles.value.length === 0) {
-    alert('Silakan pilih setidaknya satu file untuk dikirim.')
-    return
-  }
-  
-  try {
-    isSubmitting.value = true
-    const uploadedUrls = []
-    for (const file of rawFiles.value) {
-      const url = await uploadFile(file)
-      uploadedUrls.push(url)
-    }
-
-    await api.post(`/deliverables`, {
-      orderId: Number(orderId),
-      message: deliveryMessage.value,
-      fileUrls: uploadedUrls.join(',')
-    })
-
-    await completeMutation.mutateAsync(Number(orderId))
-    alert('Pengiriman berhasil dikirim!')
-    router.push('/vendor/finance')
-  } catch (err) {
-    console.error('Delivery failed', err)
-    alert('Gagal mengirimkan pekerjaan.')
-  } finally {
-    isSubmitting.value = false
-  }
-}
-</script>
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false
@@ -220,23 +190,17 @@ async function submitDelivery() {
         message: deliveryMessage.value
       })
     }
-    queryClient.invalidateQueries({ queryKey: ['deliverables', orderId] })
-    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
+    queryClient.invalidateQueries({ queryKey: ['orders', 'incoming'] })
     alert('Hasil pekerjaan berhasil dikirim!')
     rawFiles.value = []
     deliveryFiles.value = []
     deliveryMessage.value = ''
-    await fetchOrderDetail()
   } catch (err: any) {
     alert(err.response?.data?.message || 'Gagal mengirim hasil pekerjaan.')
   } finally {
     isSubmitting.value = false
   }
 }
-
-onMounted(() => {
-  fetchOrderDetail()
-})
 </script>
 
 <template>
