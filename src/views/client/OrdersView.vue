@@ -1,52 +1,73 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useMyOrders } from '../../composables/useOrders'
 
+const router = useRouter()
 const searchQuery = ref('')
 const activeFilter = ref('semua')
 const filters = ['Semua', 'Menunggu', 'Selesai']
 
-const orders = ref([
-  {
-    id: 'ORD-99281',
-    title: 'Pembuatan Brand Identity & Logo Premium',
-    status: 'menunggu',
-    escrowAmount: 4500000,
-    vendorName: 'Creative Studio Pro',
-  },
-  {
-    id: 'ORD-99280',
-    title: 'Pembuatan Brand Identity & Logo Premium',
-    status: 'menunggu',
-    escrowAmount: 4500000,
-    vendorName: 'Design Hub',
-  },
-  {
-    id: 'ORD-99279',
-    title: 'Pembuatan Brand Identity & Logo Premium',
-    status: 'selesai',
-    escrowAmount: 4500000,
-    vendorName: 'Pixel Perfect',
-  },
-])
+const { data: rawOrders, isLoading } = useMyOrders()
+const orders = computed(() => rawOrders.value || [])
+
+function isWaitingStatus(status: string) {
+  return ['UNPAID', 'PAID_PENDING_CONFIRMATION', 'IN_PROGRESS', 'DELIVERED', 'IN_REVISION', 'DISPUTE_IN_PROGRESS'].includes(status)
+}
+
+function isFinishedStatus(status: string) {
+  return ['COMPLETED', 'REFUNDED', 'CANCELLED'].includes(status)
+}
+
+function getStatusClass(status: string) {
+  if (isFinishedStatus(status)) {
+    return 'order-card__status--selesai'
+  }
+  return 'order-card__status--menunggu'
+}
+
+function getHumanStatus(status: string) {
+  switch (status) {
+    case 'UNPAID': return 'Belum Bayar'
+    case 'PAID_PENDING_CONFIRMATION': return 'Menunggu Konfirmasi'
+    case 'IN_PROGRESS': return 'Sedang Dikerjakan'
+    case 'DELIVERED': return 'Telah Dikirim'
+    case 'IN_REVISION': return 'Revisi'
+    case 'DISPUTE_IN_PROGRESS': return 'Sengketa'
+    case 'COMPLETED': return 'Selesai'
+    case 'REFUNDED': return 'Refunded'
+    case 'CANCELLED': return 'Batal'
+    default: return status
+  }
+}
 
 const filteredOrders = computed(() => {
   let result = orders.value
   if (activeFilter.value !== 'semua') {
-    result = result.filter(o => o.status === activeFilter.value)
+    if (activeFilter.value === 'menunggu') {
+      result = result.filter((o: any) => isWaitingStatus(o.status))
+    } else if (activeFilter.value === 'selesai') {
+      result = result.filter((o: any) => isFinishedStatus(o.status))
+    }
   }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
-    result = result.filter(o =>
-      o.id.toLowerCase().includes(q) ||
-      o.title.toLowerCase().includes(q) ||
-      o.vendorName.toLowerCase().includes(q)
+    result = result.filter((o: any) =>
+      String(o.id).toLowerCase().includes(q) ||
+      (o.gig?.title && o.gig.title.toLowerCase().includes(q)) ||
+      (o.merchant?.shopName && o.merchant.shopName.toLowerCase().includes(q))
     )
   }
   return result
 })
 
 function formatPrice(val: number) {
-  return 'Rp' + val.toLocaleString('id-ID')
+  if (!val) return 'Rp 0'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
+
+function goToChat() {
+  router.push('/chat')
 }
 
 onMounted(() => {
@@ -86,43 +107,73 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="orders-body">
+      <!-- Loading State -->
+      <div v-if="isLoading" class="p-8 text-center bg-white rounded-xl border border-gray-150">
+        <p class="text-gray-500 text-sm">Memuat data pesanan...</p>
+      </div>
+
+      <div v-else class="orders-body">
         <!-- Order List -->
         <div class="orders-list">
           <div
             v-for="(order, idx) in filteredOrders"
             :key="order.id"
-            class="order-card anim-in"
-            :style="{ transitionDelay: `${(idx + 2) * 80}ms` }"
+            class="order-card anim-in visible"
+            :style="{ transitionDelay: `${(Number(idx) + 2) * 80}ms` }"
           >
             <div class="order-card__top">
               <div class="order-card__id-row">
-                <span class="order-card__id">#{{ order.id }}</span>
+                <span class="order-card__id">#ORD-{{ order.id }}</span>
                 <span
                   class="order-card__status"
-                  :class="{
-                    'order-card__status--menunggu': order.status === 'menunggu',
-                    'order-card__status--selesai': order.status === 'selesai',
-                  }"
-                >{{ order.status === 'menunggu' ? 'Menunggu' : 'Selesai' }}</span>
+                  :class="getStatusClass(order.status)"
+                >{{ getHumanStatus(order.status) }}</span>
               </div>
-              <h3 class="order-card__title">{{ order.title }}</h3>
+              <h3 class="order-card__title">{{ order.gig?.title || 'Custom Order' }}</h3>
+              <p style="font-size: 0.8125rem; color: #6B7280; margin: 0.25rem 0 0;">Vendor: <strong>{{ order.merchant?.shopName || 'Unknown Vendor' }}</strong></p>
             </div>
 
             <div class="order-card__bottom">
               <div class="order-card__escrow">
-                <span class="order-card__escrow-label">DANA ESCROW</span>
+                <span class="order-card__escrow-label">TOTAL PEMBAYARAN</span>
                 <div class="order-card__escrow-amount">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  <span>{{ formatPrice(order.escrowAmount) }}</span>
+                  <span>{{ formatPrice(order.totalAmount) }}</span>
                 </div>
               </div>
               <div class="order-card__actions">
-                <button class="btn-chat-vendor">
+                <button class="btn-chat-vendor" @click="goToChat">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                   Chat Vendor
                 </button>
-                <router-link :to="`/pesanan/${order.id}`" class="btn-detail">
+                
+                <!-- If unpaid, show bayar / verify -->
+                <router-link 
+                  v-if="order.status === 'UNPAID'" 
+                  :to="`/jelajahi/${order.gigId}/verifikasi?orderId=${order.id}&method=manual`" 
+                  class="btn-detail"
+                >
+                  Bayar Sekarang
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </router-link>
+
+                <!-- If paid pending confirmation, show cek status -->
+                <router-link 
+                  v-else-if="order.status === 'PAID_PENDING_CONFIRMATION'" 
+                  :to="`/jelajahi/${order.gigId}/verifikasi?orderId=${order.id}&method=manual`" 
+                  class="btn-detail"
+                  style="background: #EA580C;"
+                >
+                  Cek Status
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </router-link>
+                
+                <!-- General detail page link -->
+                <router-link 
+                  v-else 
+                  :to="`/pesanan/${order.id}`" 
+                  class="btn-detail"
+                >
                   Lihat Detail
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </router-link>
@@ -131,14 +182,14 @@ onMounted(() => {
           </div>
 
           <!-- Empty State -->
-          <div v-if="filteredOrders.length === 0" class="orders-empty anim-in">
+          <div v-if="filteredOrders.length === 0" class="orders-empty anim-in visible">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <p>Tidak ada pesanan ditemukan</p>
           </div>
         </div>
 
         <!-- Sidebar -->
-        <aside class="orders-sidebar anim-in" style="transition-delay:240ms">
+        <aside class="orders-sidebar anim-in visible" style="transition-delay:240ms">
           <div class="sidebar-cta">
             <div class="sidebar-cta__icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>

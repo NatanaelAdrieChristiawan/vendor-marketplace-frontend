@@ -71,12 +71,11 @@ export function useAuth() {
         email: payload.email,
         password: payload.password,
         fullName: payload.username,
-        role: payload.role === 'MERCHANT' ? 'MERCHANT_OWNER' : 'CLIENT'
       }
       const response = await api.post('/users', apiPayload)
       return { ...response.data, originalPayload: payload }
     },
-    onSuccess: (res, variables) => {
+    onSuccess: (_res, variables) => {
       if (variables.role === 'MERCHANT') {
         localStorage.setItem('is_registering_merchant', 'true')
       }
@@ -88,13 +87,73 @@ export function useAuth() {
     }
   })
 
+  const fetchMerchantStatus = async (userId: string) => {
+    try {
+      const res = await api.get('/merchants/profile')
+      const merchant = res.data
+      localStorage.setItem(`merchant_status_${userId}`, merchant.status)
+      localStorage.setItem(`merchant_${userId}`, JSON.stringify(merchant))
+      return merchant
+    } catch (err: any) {
+      const status = err.response?.status
+      const message = err.response?.data?.message
+
+      if (status === 400 && message?.includes('tidak dapat mengakses profil toko')) {
+        // The merchant exists but is either INCOMPLETE, PENDING_VERIFICATION, or REJECTED.
+        // Let's probe if it is REJECTED by calling acknowledge-rejection.
+        try {
+          const ackRes = await api.patch('/merchants/kyb/acknowledge-rejection')
+          const merchant = ackRes.data
+          // We annotate the status as REJECTED for the frontend
+          const annotatedMerchant = {
+            ...merchant,
+            status: 'REJECTED'
+          }
+          localStorage.setItem(`merchant_status_${userId}`, 'REJECTED')
+          localStorage.setItem(`merchant_${userId}`, JSON.stringify(annotatedMerchant))
+          return annotatedMerchant
+        } catch (ackErr: any) {
+          // If acknowledge-rejection fails, it is not REJECTED. It is either INCOMPLETE or PENDING_VERIFICATION.
+          const storedStatus = localStorage.getItem(`merchant_status_${userId}`)
+          const storedMerchantStr = localStorage.getItem(`merchant_${userId}`)
+          let merchant = storedMerchantStr ? JSON.parse(storedMerchantStr) : null
+
+          if (storedStatus === 'PENDING_VERIFICATION' || storedStatus === 'INCOMPLETE') {
+            if (!merchant) merchant = {}
+            merchant.status = storedStatus
+            return merchant
+          }
+          
+          // Default fallback
+          if (!merchant) merchant = {}
+          merchant.status = 'INCOMPLETE'
+          return merchant
+        }
+      } else if (status === 404) {
+        localStorage.setItem(`merchant_status_${userId}`, 'INCOMPLETE')
+        return null
+      }
+      
+      const storedMerchantStr = localStorage.getItem(`merchant_${userId}`)
+      return storedMerchantStr ? JSON.parse(storedMerchantStr) : null
+    }
+  }
+
   const profileQuery = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
       const response = await api.get('/auth/profile')
-      return response.data
+      const user = response.data
+      if (user) {
+        const roleUpper = user.role?.toUpperCase()
+        if (roleUpper === 'MERCHANT_OWNER' || roleUpper === 'MERCHANT' || roleUpper === 'VENDOR' || roleUpper === 'MERCHANT_ASSOCIATE') {
+          const merchant = await fetchMerchantStatus(String(user.id || user.sub))
+          user.merchant = merchant
+        }
+      }
+      return user
     },
-    enabled: !!authStore.token && !authStore.user,
+    enabled: computed(() => !!authStore.token),
     retry: false
   })
 
@@ -129,8 +188,25 @@ export function useAuth() {
       const response = await api.patch('/merchants/submit-kyb', payload)
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (res) {
+        const userId = String(authStore.currentUser?.id)
+        if (userId) {
+          localStorage.setItem(`merchant_status_${userId}`, 'PENDING_VERIFICATION')
+          localStorage.setItem(`merchant_${userId}`, JSON.stringify(res))
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['profile'] })
+    },
+    onError: (err: any) => {
+      const message = err.response?.data?.message
+      if (message?.includes('Pengajuan KYB hanya bisa dilakukan dari status INCOMPLETE')) {
+        const userId = String(authStore.currentUser?.id)
+        if (userId) {
+          localStorage.setItem(`merchant_status_${userId}`, 'PENDING_VERIFICATION')
+          queryClient.invalidateQueries({ queryKey: ['profile'] })
+        }
+      }
     }
   })
 
@@ -140,18 +216,44 @@ export function useAuth() {
       return response.data
     },
     onSuccess: (res) => {
-      if (res.status === 'success' || res.data) {
-        const { access_token, user } = res.data
-        const mappedUser = {
-          ...user,
-          id: String(user.id || user.sub),
-          name: user.fullName || user.name || 'User'
+      const data = res.data || res
+      if (data) {
+        const { access_token, user, merchant } = data
+        if (access_token && user) {
+          const mappedUser = {
+            ...user,
+            id: String(user.id || user.sub),
+            name: user.fullName || user.name || 'User',
+            merchant: merchant || (data.status ? { status: data.status } : null)
+          }
+          authStore.setAuth(mappedUser, access_token)
+          
+          const userId = String(mappedUser.id)
+          if (merchant) {
+            localStorage.setItem(`merchant_status_${userId}`, merchant.status || 'INCOMPLETE')
+            localStorage.setItem(`merchant_${userId}`, JSON.stringify(merchant))
+          } else if (data.status) {
+            localStorage.setItem(`merchant_status_${userId}`, data.status)
+          }
         }
-        authStore.setAuth(mappedUser, access_token)
-        router.push('/vendor/dashboard')
       }
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
     }
   })
+
+  const uploadFile = async (file: File, bucket?: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (bucket) {
+      formData.append('bucket', bucket)
+    }
+    const response = await api.post('/upload/image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  }
 
   return {
     isLoggedIn,
@@ -162,6 +264,7 @@ export function useAuth() {
     profileQuery,
     registerVendorMutation,
     submitKybMutation,
-    registerMerchantMutation
+    registerMerchantMutation,
+    uploadFile
   }
 }

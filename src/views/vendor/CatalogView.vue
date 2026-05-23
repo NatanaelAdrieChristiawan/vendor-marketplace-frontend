@@ -1,23 +1,57 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useMyGigs } from '../../composables/useGigs'
+import Toast from '../../components/ui/Toast.vue'
+import api from '../../api/axios'
 
 const router = useRouter()
+const { data: rawGigs, isLoading, refetch } = useMyGigs()
 
 type GigStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'RESTRICTED'
 
-interface Gig {
-  id: number
-  title: string
-  description: string
-  price: number
-  status: GigStatus
-  images: string[]
-  isPromoted: boolean
-  rejectionNote?: string
-}
-
 const activeTab = ref<'all' | 'pending' | 'approved' | 'rejected' | 'draft'>('all')
+
+const gigs = computed(() => {
+  if (!rawGigs.value) return []
+  return rawGigs.value.map((g: any) => {
+    let mappedStatus: GigStatus = 'DRAFT'
+    if (g.status === 'ACTIVE' || g.status === 'FEATURED') {
+      mappedStatus = 'ACTIVE'
+    } else if (g.status === 'PENDING_APPROVAL') {
+      mappedStatus = 'PENDING'
+    } else if (g.status === 'REJECTED') {
+      mappedStatus = 'REJECTED'
+    } else if (g.status === 'PAUSED' || g.status === 'REMOVED') {
+      mappedStatus = 'RESTRICTED'
+    } else {
+      mappedStatus = 'DRAFT'
+    }
+
+    let parsedDesc = g.description
+    try {
+      const parsed = JSON.parse(g.description)
+      if (parsed && typeof parsed === 'object' && parsed.text) {
+        parsedDesc = parsed.text
+      }
+    } catch (_) {}
+
+    return {
+      id: g.id,
+      title: g.title,
+      description: parsedDesc,
+      price: typeof g.price === 'string' ? parseFloat(g.price) : g.price,
+      status: mappedStatus,
+      mediaUrls: g.mediaUrls || '',
+      isPromoted: g.featuredStatus === 'FEATURED',
+      rejectionNote: g.rejectionReason || undefined
+    }
+  })
+})
+
+const showRejectionNote = ref<number | null>(null)
+const showToast = ref(false)
+const toastData = ref({ type: 'success' as 'success' | 'info' | 'error', title: '', subtitle: '' })
 
 const tabs = [
   { key: 'all', label: 'Semua' },
@@ -27,56 +61,11 @@ const tabs = [
   { key: 'draft', label: 'Draf' },
 ]
 
-const gigs = ref<Gig[]>([
-  {
-    id: 1,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 45000,
-    status: 'RESTRICTED',
-    images: ['/placeholder-gig.jpg'],
-    isPromoted: false,
-  },
-  {
-    id: 2,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 45000,
-    status: 'ACTIVE',
-    images: ['/placeholder-gig.jpg'],
-    isPromoted: true,
-  },
-  {
-    id: 3,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 45000,
-    status: 'PENDING',
-    images: ['/placeholder-gig.jpg'],
-    isPromoted: false,
-  },
-  {
-    id: 4,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 45000,
-    status: 'REJECTED',
-    images: ['/placeholder-gig.jpg'],
-    isPromoted: false,
-    rejectionNote: 'Harga terlalu rendah untuk posisi brand saat ini. Sesuaikan minimal menjadi Rp50.000',
-  },
-  {
-    id: 5,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 45000,
-    status: 'DRAFT',
-    images: ['/placeholder-gig.jpg'],
-    isPromoted: false,
-  },
-])
-
-const showRejectionNote = ref<number | null>(null)
+function showToastMsg(type: 'success' | 'info' | 'error', title: string, subtitle: string) {
+  toastData.value = { type, title, subtitle }
+  showToast.value = true
+  setTimeout(() => showToast.value = false, 3000)
+}
 
 const filteredGigs = computed(() => {
   if (activeTab.value === 'all') return gigs.value
@@ -86,7 +75,7 @@ const filteredGigs = computed(() => {
     rejected: ['REJECTED'],
     draft: ['DRAFT'],
   }
-  return gigs.value.filter(g => map[activeTab.value]?.includes(g.status))
+  return gigs.value.filter((g: any) => map[activeTab.value]?.includes(g.status))
 })
 
 function formatPrice(n: number) {
@@ -119,13 +108,25 @@ function toggleNote(id: number) {
   showRejectionNote.value = showRejectionNote.value === id ? null : id
 }
 
-function deleteGig(id: number) {
-  gigs.value = gigs.value.filter(g => g.id !== id)
+async function deleteGig(id: number) {
+  if (!confirm('Apakah Anda yakin ingin menghapus layanan ini?')) return
+  try {
+    await api.delete(`/gigs/${id}`)
+    showToastMsg('success', 'Layanan Dihapus', 'Layanan berhasil dihapus dari katalog')
+    refetch()
+  } catch (err) {
+    console.error('Failed to delete gig', err)
+    showToastMsg('error', 'Gagal Menghapus', 'Tidak dapat menghapus layanan dari server')
+  }
 }
 </script>
 
 <template>
   <div class="catalog-page">
+    <div v-if="showToast" class="fixed top-8 right-8 z-50">
+      <Toast :type="toastData.type" :title="toastData.title" :subtitle="toastData.subtitle" />
+    </div>
+
     <!-- Header -->
     <h1 class="page-title">Manajemen Layanan</h1>
 
@@ -148,8 +149,17 @@ function deleteGig(id: number) {
       </router-link>
     </div>
 
+    <!-- Loading State -->
+    <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 text-gray-500">
+      <svg class="animate-spin h-8 w-8 text-blue-500 mb-4" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <p class="text-sm font-semibold">Memuat katalog layanan Anda...</p>
+    </div>
+
     <!-- Cards Grid -->
-    <div class="cards-grid">
+    <div v-else class="cards-grid">
       <div
         v-for="gig in filteredGigs"
         :key="gig.id"
@@ -158,7 +168,8 @@ function deleteGig(id: number) {
       >
         <!-- Thumbnail -->
         <div class="gig-thumb">
-          <div class="thumb-placeholder">
+          <img v-if="gig.mediaUrls" :src="gig.mediaUrls" alt="Thumbnail" class="w-full h-full object-cover" />
+          <div v-else class="thumb-placeholder">
             <svg class="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           </div>
           <span v-if="gig.status !== 'DRAFT'" class="status-badge" :class="statusClass(gig.status)">

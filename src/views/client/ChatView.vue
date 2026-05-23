@@ -1,68 +1,236 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { StreamChat } from 'stream-chat'
+import { useAuth } from '../../composables/useAuth'
+import api from '../../api/axios'
 
-const activeChat = ref(1)
+const router = useRouter()
+const { user } = useAuth()
 
-const chats = [
-  {
-    id: 1,
-    name: 'Ammi Watts',
-    avatar: 'https://ui-avatars.com/api/?name=Ammi+Watts&background=3B5BDB&color=fff',
-    lastMessage: 'I will check it and get back to you soon',
-    time: '04:45 PM',
-    isStarred: true,
-  },
-  {
-    id: 2,
-    name: 'Jennifer Markus',
-    avatar: 'https://ui-avatars.com/api/?name=Jennifer+Markus&background=random',
-    lastMessage: 'Hey! Did you finish the Hi-FI wireframes for flora app design?',
-    time: 'Today | 05:30 PM',
-    isStarred: false,
+const chatClient = ref<StreamChat | null>(null)
+const channels = ref<any[]>([])
+const activeChannelId = ref<string | null>(null)
+const messageText = ref('')
+const isLoading = ref(true)
+const isSending = ref(false)
+
+const messagesContainer = ref<HTMLElement | null>(null)
+const messageTrigger = ref(0)
+
+const activeChannel = computed(() => {
+  return channels.value.find(c => c.id === activeChannelId.value) || null
+})
+
+const chatMessages = computed(() => {
+  messageTrigger.value
+  if (!activeChannel.value) return []
+  return [...activeChannel.value.state.messages]
+})
+
+function getOtherMember(channel: any) {
+  if (!user.value || !channel) return null
+  const members = channel.state.members
+  const otherId = Object.keys(members).find(id => id !== String(user.value?.id))
+  return otherId ? members[otherId].user : null
+}
+
+const chatsList = computed(() => {
+  messageTrigger.value
+  return channels.value.map((channel: any) => {
+    const otherUser = getOtherMember(channel)
+    const lastMsgObj = channel.state.messages[channel.state.messages.length - 1]
+    let lastMsgText = 'Belum ada pesan'
+    if (lastMsgObj) {
+      if (lastMsgObj.attachments?.length && lastMsgObj.attachments[0].type === 'custom_offer') {
+        lastMsgText = '📦 [Penawaran Kustom]'
+      } else {
+        lastMsgText = lastMsgObj.text || ''
+      }
+    }
+    const lastMsgTime = lastMsgObj?.created_at ? new Date(lastMsgObj.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''
+    
+    return {
+      id: channel.id,
+      name: otherUser?.name || otherUser?.id || 'User',
+      avatar: otherUser?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser?.name || 'User')}&background=3B5BDB&color=fff`,
+      lastMessage: lastMsgText,
+      time: lastMsgTime,
+      channel: channel
+    }
+  })
+})
+
+async function scrollToBottom() {
+  await nextTick()
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   }
-]
+}
 
-const messages = [
-  {
-    id: 1,
-    senderId: 1, // Ammi
-    type: 'text',
-    content: 'Oh, hello! All perfectly.\nI will check it and get back to you soon',
-    time: '04:45 PM',
-  },
-  {
-    id: 2,
-    senderId: 'me',
-    type: 'text',
-    content: 'Oh, hello! All perfectly.\nI will check it and get back to you soon',
-    time: '04:45 PM',
-  },
-  {
-    id: 3,
-    senderId: 1,
-    type: 'text',
-    content: 'p nawar',
-    time: '04:45 PM',
-  },
-  {
-    id: 4,
-    senderId: 1,
-    type: 'offer',
-    offerDetails: {
-      title: 'Desain Logo Premium (3 Konsep)',
-      description: 'Pembuatan 3 alternatif desain logo minimalis premium, dan 2 kali revisi minor.',
-      price: 'Rp 1.500.000',
-      duration: '3 Hari'
-    },
-    time: '',
+watch(() => chatMessages.value?.length, () => {
+  scrollToBottom()
+})
+
+async function initChat() {
+  if (!user.value) {
+    isLoading.value = false
+    return
   }
-]
+  try {
+    isLoading.value = true
+    const apiKey = import.meta.env.VITE_STREAM_API_KEY
+    if (!apiKey) {
+      console.error('VITE_STREAM_API_KEY is not defined')
+      return
+    }
+    
+    chatClient.value = StreamChat.getInstance(apiKey)
+    const tokenRes = await api.get('/chat/token')
+    const token = tokenRes.data.token
+
+    await chatClient.value.connectUser(
+      {
+        id: String(user.value.id),
+        name: user.value.fullName || user.value.name,
+        image: user.value.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.value.fullName || user.value.name)}&background=3B5BDB&color=fff`
+      },
+      token
+    )
+
+    await queryChannels()
+
+    // Listen for new messages globally to update lists
+    chatClient.value.on('message.new', handleGlobalMessageNew)
+    chatClient.value.on('message.updated', handleGlobalMessageUpdated)
+
+  } catch (err) {
+    console.error('Error initializing chat:', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function queryChannels() {
+  if (!chatClient.value || !user.value) return
+  const filter = { members: { $in: [String(user.value.id)] } }
+  const sort = { last_message_at: -1 }
+  const res = await chatClient.value.queryChannels(filter, sort as any, {
+    watch: true,
+    state: true
+  })
+  channels.value = res
+  const firstChannel = res[0]
+  if (firstChannel && firstChannel.id && !activeChannelId.value) {
+    await selectChannel(firstChannel.id)
+  }
+}
+
+async function selectChannel(channelId: string) {
+  activeChannelId.value = channelId
+  const channel = channels.value.find(c => c.id === channelId)
+  if (channel) {
+    await channel.markRead()
+    messageTrigger.value++
+    await scrollToBottom()
+  }
+}
+
+function handleGlobalMessageNew(event: any) {
+  queryChannelsListOnly()
+  const cid = event?.channel_id || event?.channel?.id
+  if (cid === activeChannelId.value) {
+    messageTrigger.value++
+  }
+}
+
+function handleGlobalMessageUpdated(event: any) {
+  queryChannelsListOnly()
+  const cid = event?.channel_id || event?.channel?.id
+  if (cid === activeChannelId.value) {
+    messageTrigger.value++
+  }
+}
+
+async function queryChannelsListOnly() {
+  if (!chatClient.value || !user.value) return
+  const filter = { members: { $in: [String(user.value.id)] } }
+  const sort = { last_message_at: -1 }
+  const res = await chatClient.value.queryChannels(filter, sort as any)
+  channels.value = res
+}
+
+async function sendMessage() {
+  if (!messageText.value.trim() || !activeChannel.value || isSending.value) return
+  isSending.value = true
+  try {
+    await activeChannel.value.sendMessage({
+      text: messageText.value
+    })
+    messageText.value = ''
+    messageTrigger.value++
+    await scrollToBottom()
+  } catch (err) {
+    console.error('Failed to send message:', err)
+  } finally {
+    isSending.value = false
+  }
+}
+
+function formatPrice(val: any) {
+  if (!val) return 'Rp 0'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
+
+function formatMsgTime(dateStr: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+}
+
+async function acceptOffer(offerId: number, messageId: string) {
+  try {
+    isLoading.value = true
+    const res = await api.patch(`/custom-offers/${offerId}/accept`, { messageId })
+    alert('Penawaran berhasil diterima! Mengalihkan ke halaman pembayaran...')
+    const order = res.data.order
+    router.push(`/jelajahi/${order.gigId}/checkout?orderId=${order.id}&price=${order.totalAmount}&plan=Custom Offer`)
+  } catch (err: any) {
+    console.error('Failed to accept offer:', err)
+    alert(err.response?.data?.message || 'Gagal menerima penawaran.')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function rejectOffer(offerId: number, messageId: string) {
+  try {
+    isLoading.value = true
+    await api.patch(`/custom-offers/${offerId}/reject`, { messageId })
+    alert('Penawaran berhasil ditolak.')
+    await queryChannels()
+  } catch (err: any) {
+    console.error('Failed to reject offer:', err)
+    alert(err.response?.data?.message || 'Gagal menolak penawaran.')
+  } finally {
+    isLoading.value = false
+  }
+}
 
 onMounted(() => {
+  initChat()
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target) } })
   }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' })
   document.querySelectorAll('.anim-in').forEach((el) => observer.observe(el))
+})
+
+onUnmounted(() => {
+  if (chatClient.value) {
+    chatClient.value.off('message.new', handleGlobalMessageNew)
+    chatClient.value.off('message.updated', handleGlobalMessageUpdated)
+    chatClient.value.disconnectUser()
+  }
 })
 </script>
 
@@ -75,41 +243,33 @@ onMounted(() => {
         <!-- Sidebar Header -->
         <div class="chat-sidebar__header">
           <button class="chat-sidebar__filter">
-            All Messages
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            Obrolan Chat
           </button>
-          <button class="chat-sidebar__more" aria-label="More options">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-          </button>
-        </div>
-
-        <!-- Search -->
-        <div class="chat-sidebar__search">
-          <div class="search-input-wrapper">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" placeholder="Search or start a new chat" />
-          </div>
         </div>
 
         <!-- Chat List -->
         <div class="chat-list">
+          <div v-if="isLoading && channels.length === 0" class="p-6 text-center text-gray-500 text-xs">
+            Memuat obrolan...
+          </div>
+          <div v-else-if="chatsList.length === 0" class="p-6 text-center text-gray-400 text-xs">
+            Belum ada obrolan aktif.
+          </div>
           <div 
-            v-for="chat in chats" 
+            v-else
+            v-for="chat in chatsList" 
             :key="chat.id" 
             class="chat-item"
-            :class="{ 'chat-item--active': activeChat === chat.id }"
-            @click="activeChat = chat.id"
+            :class="{ 'chat-item--active': activeChannelId === chat.id }"
+            @click="selectChannel(chat.id)"
           >
             <img :src="chat.avatar" :alt="chat.name" class="chat-item__avatar" />
             <div class="chat-item__content">
               <div class="chat-item__top">
                 <h4 class="chat-item__name">{{ chat.name }}</h4>
-                <button class="chat-item__star" :class="{ 'chat-item__star--active': chat.isStarred }">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                </button>
               </div>
               <p class="chat-item__last-message">{{ chat.lastMessage }}</p>
-              <div class="chat-item__time">
+              <div class="chat-item__time" v-if="chat.time">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 {{ chat.time }}
               </div>
@@ -120,82 +280,87 @@ onMounted(() => {
 
       <!-- Main Chat Area -->
       <main class="chat-main">
-        <!-- Chat Header -->
-        <header class="chat-header">
-          <div class="chat-header__user">
-            <img :src="chats.find(c => c.id === activeChat)?.avatar" alt="User avatar" class="chat-header__avatar" />
-            <h3 class="chat-header__name">{{ chats.find(c => c.id === activeChat)?.name }}</h3>
-          </div>
-          <button class="btn-create-offer">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Buat Penawaran
-          </button>
-        </header>
+        <template v-if="activeChannel">
+          <!-- Chat Header -->
+          <header class="chat-header">
+            <div class="chat-header__user">
+              <img :src="getOtherMember(activeChannel)?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(getOtherMember(activeChannel)?.name || 'User')}&background=3B5BDB&color=fff`" alt="User avatar" class="chat-header__avatar" />
+              <h3 class="chat-header__name">{{ getOtherMember(activeChannel)?.name || 'Merchant' }}</h3>
+            </div>
+          </header>
 
-        <!-- Chat Messages -->
-        <div class="chat-messages">
-          <div 
-            v-for="msg in messages" 
-            :key="msg.id" 
-            class="message-wrapper anim-in"
-            :class="msg.senderId === 'me' ? 'message-wrapper--me' : 'message-wrapper--them'"
-          >
-            <template v-if="msg.type === 'text'">
-              <div class="message-bubble">{{ msg.content }}</div>
-              <span class="message-time">{{ msg.time }}</span>
-            </template>
-            
-            <template v-else-if="msg.type === 'offer'">
-              <div class="offer-card">
-                <div class="offer-card__header">
-                  <h4 class="offer-card__title">Penawaran Kustom</h4>
-                </div>
-                <div class="offer-card__body">
-                  <h5 class="offer-card__item-title">{{ msg.offerDetails?.title }}</h5>
-                  <p class="offer-card__item-desc">{{ msg.offerDetails?.description }}</p>
-                  
-                  <div class="offer-card__meta">
-                    <div class="meta-block">
-                      <span class="meta-label">HARGA</span>
-                      <strong class="meta-value">{{ msg.offerDetails?.price }}</strong>
-                    </div>
-                    <div class="meta-block">
-                      <span class="meta-label">WAKTU KERJA</span>
-                      <div class="meta-value-with-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <strong>{{ msg.offerDetails?.duration }}</strong>
+          <!-- Chat Messages -->
+          <div class="chat-messages" ref="messagesContainer">
+            <div 
+              v-for="msg in chatMessages" 
+              :key="msg.id" 
+              class="message-wrapper"
+              :class="msg.user?.id === String(user?.id) ? 'message-wrapper--me' : 'message-wrapper--them'"
+            >
+              <!-- Detect Custom Offer Attachment -->
+              <template v-if="msg.attachments && msg.attachments.length > 0 && msg.attachments[0].type === 'custom_offer'">
+                <div class="offer-card">
+                  <div class="offer-card__header">
+                    <h4 class="offer-card__title">Penawaran Kustom</h4>
+                  </div>
+                  <div class="offer-card__body">
+                    <h5 class="offer-card__item-title">{{ msg.text.replace('📦 Penawaran Baru: ', '') }}</h5>
+                    <p class="offer-card__item-desc">Penawaran kustom khusus untuk kebutuhan proyek Anda.</p>
+                    
+                    <div class="offer-card__meta">
+                      <div class="meta-block">
+                        <span class="meta-label">HARGA PENAWARAN</span>
+                        <strong class="meta-value" style="color: #3B5BDB;">{{ formatPrice(msg.attachments[0].offer_price) }}</strong>
                       </div>
                     </div>
                   </div>
+                  
+                  <div class="offer-card__actions" v-if="msg.attachments[0].status === 'PENDING'">
+                    <button class="btn-accept" @click="acceptOffer(msg.attachments[0].offer_id, msg.id)">Terima Tawaran</button>
+                    <button class="btn-reject" @click="rejectOffer(msg.attachments[0].offer_id, msg.id)">Tolak</button>
+                  </div>
+                  <div class="offer-card__actions" v-else-if="msg.attachments[0].status === 'ACCEPTED'">
+                    <span style="font-weight: 700; color: #16A34A; font-size: 0.875rem;">✅ Penawaran Diterima</span>
+                  </div>
+                  <div class="offer-card__actions" v-else-if="msg.attachments[0].status === 'REJECTED'">
+                    <span style="font-weight: 700; color: #DC2626; font-size: 0.875rem;">❌ Penawaran Ditolak</span>
+                  </div>
                 </div>
-                <div class="offer-card__actions">
-                  <button class="btn-accept">Terima Tawaran</button>
-                  <button class="btn-reject">Tolak</button>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
+                <span class="message-time">{{ formatMsgTime(msg.created_at) }}</span>
+              </template>
 
-        <!-- Chat Input -->
-        <footer class="chat-input-area">
-          <div class="chat-input-container">
-            <button class="btn-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-            </button>
-            <div class="input-wrapper">
-              <input type="text" placeholder="Type your message here ..." />
+              <!-- Standard Message -->
+              <template v-else>
+                <div class="message-bubble">{{ msg.text }}</div>
+                <span class="message-time">{{ formatMsgTime(msg.created_at) }}</span>
+              </template>
             </div>
-            <button class="btn-send">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </button>
           </div>
-        </footer>
+
+          <!-- Chat Input -->
+          <footer class="chat-input-area">
+            <form @submit.prevent="sendMessage" class="chat-input-container">
+              <div class="input-wrapper">
+                <input v-model="messageText" type="text" placeholder="Tulis pesan Anda di sini..." :disabled="isSending" />
+              </div>
+              <button type="submit" class="btn-send" :disabled="isSending || !messageText.trim()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </form>
+          </footer>
+        </template>
+        <template v-else>
+          <div class="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 12-2h14a2 2 0 0 1 2 2z"/></svg>
+            <p class="text-sm">Pilih obrolan dari daftar di samping untuk memulai chat.</p>
+          </div>
+        </template>
       </main>
 
     </div>
   </div>
 </template>
+
 
 <style scoped>
 /* Animations */

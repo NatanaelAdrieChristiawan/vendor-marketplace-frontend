@@ -1,358 +1,229 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useWithdrawals } from '../../composables/useWithdrawals'
 
-const activeTab = ref('All')
-const tabs = ['All', 'Menunggu', 'Selesai', 'Ditolak']
-
-const requests = ref([
-  { 
-    id: 1, 
-    pemohon: 'User A', 
-    status: 'Menunggu', 
-    vendor: 'Creativ Studio', 
-    email: 'creativs@untitledui.com',
-    saldo: 'Rp12.450.000,00',
-    penarikan: 'Rp150.500,00',
-    bank: 'Bank Indonesia',
-    norek: '223 3535 8829',
-    penerima: 'Creativ Studio',
-    reqSummary: {
-      diminta: 'Rp175.500,00',
-      biaya: '-Rp22.000,00',
-      pajak: '-0,00',
-      total: 'Rp153.500,00'
-    }
-  },
-  { 
-    id: 2, 
-    pemohon: 'User B', 
-    status: 'Selesai', 
-    vendor: 'Event Essentials', 
-    email: 'events@untitledui.com',
-    saldo: 'Rp5.000.000,00',
-    penarikan: 'Rp1.000.000,00',
-    bank: 'BCA',
-    norek: '012 3456 789',
-    penerima: 'Event Essentials',
-    reqSummary: {
-      diminta: 'Rp1.000.000,00',
-      biaya: '-Rp5.000,00',
-      pajak: '-0,00',
-      total: 'Rp995.000,00'
-    }
-  },
-  { 
-    id: 3, 
-    pemohon: 'User C', 
-    status: 'Menunggu', 
-    vendor: 'Tech & Digital', 
-    email: 'tech@untitledui.com',
-    saldo: 'Rp8.200.000,00',
-    penarikan: 'Rp2.500.000,00',
-    bank: 'Bank Mandiri',
-    norek: '137 000 123 4567',
-    penerima: 'Tech & Digital',
-    reqSummary: {
-      diminta: 'Rp2.500.000,00',
-      biaya: '-Rp12.500,00',
-      pajak: '-0,00',
-      total: 'Rp2.487.500,00'
-    }
-  },
-  { 
-    id: 4, 
-    pemohon: 'User D', 
-    status: 'Ditolak', 
-    vendor: 'Merch Apparel', 
-    email: 'merch@untitledui.com',
-    saldo: 'Rp1.500.000,00',
-    penarikan: 'Rp2.000.000,00',
-    bank: 'BRI',
-    norek: '0011 2233 4455 667',
-    penerima: 'Merch Apparel',
-    reqSummary: {
-      diminta: 'Rp2.000.000,00',
-      biaya: '-Rp10.000,00',
-      pajak: '-0,00',
-      total: 'Rp1.990.000,00'
-    }
-  },
-])
-
-const filteredRequests = computed(() => {
-  if (activeTab.value === 'All') return requests.value
-  return requests.value.filter(r => r.status === activeTab.value)
-})
+const { pendingWithdrawalsQuery, completeWithdrawalMutation, rejectWithdrawalMutation } = useWithdrawals()
 
 const currentView = ref<'list' | 'detail'>('list')
 const selectedRequest = ref<any>(null)
+const proofUrl = ref('')
+const errorMsg = ref('')
+
+const requests = computed(() => pendingWithdrawalsQuery.data.value || [])
 
 function viewDetail(req: any) {
   selectedRequest.value = req
+  proofUrl.value = ''
+  errorMsg.value = ''
   currentView.value = 'detail'
 }
 
 function goBack() {
   currentView.value = 'list'
   selectedRequest.value = null
+  errorMsg.value = ''
 }
 
-function markAsCompleted() {
-  if (selectedRequest.value) {
-    const idx = requests.value.findIndex(r => r.id === selectedRequest.value.id)
-    if (idx !== -1) {
-      const req = requests.value[idx]
-      if (req) req.status = 'Selesai'
-    }
-  }
-  goBack()
-}
-
-function getStatusClass(status: string) {
-  switch (status) {
-    case 'Selesai': return 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-    case 'Menunggu': return 'text-amber-700 bg-amber-50 border border-amber-200'
-    case 'Ditolak': return 'text-red-700 bg-red-50 border border-red-200'
-    default: return 'text-gray-700 bg-gray-50'
+async function handleComplete() {
+  if (!selectedRequest.value || !proofUrl.value.trim()) return
+  try {
+    await completeWithdrawalMutation.mutateAsync({
+      id: selectedRequest.value.id,
+      proofUrl: proofUrl.value
+    })
+    goBack()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Gagal memproses penarikan.'
   }
 }
 
-function getStatusDotClass(status: string) {
-  switch (status) {
-    case 'Selesai': return 'bg-emerald-500'
-    case 'Menunggu': return 'bg-amber-500'
-    case 'Ditolak': return 'bg-red-500'
-    default: return 'bg-gray-500'
+async function handleReject() {
+  if (!selectedRequest.value) return
+  try {
+    await rejectWithdrawalMutation.mutateAsync(selectedRequest.value.id)
+    goBack()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Gagal menolak penarikan.'
   }
+}
+
+function formatCurrency(amount: any) {
+  if (!amount) return 'Rp 0'
+  return `Rp ${Number(amount).toLocaleString('id-ID')}`
+}
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('id-ID', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 </script>
 
 <template>
-  <div class="space-y-6 pb-12 w-full max-w-6xl mx-auto font-sans">
-    
-    <!-- LIST VIEW -->
+  <div class="space-y-6 pb-12 w-full max-w-6xl mx-auto font-sans animate-fade-in">
     <template v-if="currentView === 'list'">
-      <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-2xl font-semibold text-gray-800">Daftar Permintaan Pencairan Dana (Withdrawal)</h1>
+        <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Permintaan Pencairan Dana</h1>
+        <p class="text-sm text-gray-500 mt-1">Daftar pengajuan penarikan dana dari merchant yang perlu diproses.</p>
       </div>
 
-      <!-- Tabs -->
-      <div class="border-b border-gray-200 flex gap-8">
-        <button 
-          v-for="tab in tabs" 
-          :key="tab"
-          @click="activeTab = tab"
-          class="pb-4 text-sm font-semibold transition-colors relative"
-          :class="activeTab === tab ? 'text-[#2A437E]' : 'text-gray-500 hover:text-gray-700'"
-        >
-          {{ tab }}
-          <div v-if="activeTab === tab" class="absolute bottom-0 left-0 w-full h-0.5 bg-[#2A437E] rounded-t-full"></div>
-        </button>
-      </div>
-
-      <!-- Table Container -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        
-        <!-- Badge User Count -->
-        <div class="p-5 border-b border-gray-100 flex items-center">
-          <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-[#7E56D8] bg-[#F4F0FC] border border-[#EBE4F9]">
-            {{ filteredRequests.length }} User
+      <div class="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="p-6 border-b border-gray-50 flex items-center justify-between">
+          <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-[#1E3A8A] bg-blue-50 border border-blue-100">
+            {{ requests.length }} Pengajuan Menunggu
           </span>
         </div>
 
-        <!-- Table -->
-        <div class="overflow-x-auto">
+        <div v-if="pendingWithdrawalsQuery.isLoading.value" class="p-12 text-center text-gray-500">
+          Memuat data pengajuan...
+        </div>
+
+        <div v-else-if="requests.length === 0" class="p-16 text-center text-gray-400">
+          Tidak ada pengajuan pencairan dana yang menunggu persetujuan.
+        </div>
+
+        <div v-else class="overflow-x-auto">
           <table class="w-full text-left border-collapse">
             <thead>
-              <tr class="bg-white border-b border-gray-100 text-xs font-semibold text-gray-500">
-                <th class="px-6 py-4">Nama Pemohon</th>
-                <th class="px-6 py-4">Status <span class="text-gray-400">↓</span></th>
-                <th class="px-6 py-4">Vendor <span class="text-gray-400">?</span></th>
-                <th class="px-6 py-4">Email</th>
+              <tr class="bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                <th class="px-6 py-4">Nama Toko</th>
+                <th class="px-6 py-4">Rekening Tujuan</th>
+                <th class="px-6 py-4">Nominal</th>
+                <th class="px-6 py-4">Tanggal Diajukan</th>
                 <th class="px-6 py-4 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="req in filteredRequests" :key="req.id" class="hover:bg-gray-50/50 transition-colors">
+              <tr v-for="req in requests" :key="req.id" class="hover:bg-gray-50/50 transition-colors">
                 <td class="px-6 py-5">
-                  <span class="text-sm font-bold text-gray-900">{{ req.pemohon }}</span>
+                  <span class="text-sm font-bold text-gray-900">{{ req.merchant?.shopName }}</span>
                 </td>
                 <td class="px-6 py-5">
-                  <span :class="getStatusClass(req.status)" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold">
-                    <span class="w-1.5 h-1.5 rounded-full" :class="getStatusDotClass(req.status)"></span>
-                    {{ req.status }}
-                  </span>
+                  <div class="text-sm font-medium text-gray-800">{{ req.bankAccount?.bankName }}</div>
+                  <div class="text-xs text-gray-500">{{ req.bankAccount?.accountNumber }} a/n {{ req.bankAccount?.accountHolderName }}</div>
                 </td>
                 <td class="px-6 py-5">
-                  <span class="text-sm font-bold text-gray-700">{{ req.vendor }}</span>
+                  <span class="text-sm font-extrabold text-[#1E3A8A]">{{ formatCurrency(req.amount) }}</span>
                 </td>
-                <td class="px-6 py-5">
-                  <span class="text-sm font-bold text-gray-700">{{ req.email }}</span>
+                <td class="px-6 py-5 text-xs text-gray-500">
+                  {{ formatDate(req.createdAt) }}
                 </td>
-                <td class="px-6 py-5">
-                  <div class="flex items-center justify-center">
-                    <button 
-                      @click="viewDetail(req)"
-                      class="px-5 py-2 bg-[#2A437E] hover:bg-[#1e305a] text-white text-xs font-bold rounded-lg transition-colors"
-                    >
-                      Lihat
-                    </button>
-                  </div>
+                <td class="px-6 py-5 text-center">
+                  <button 
+                    @click="viewDetail(req)"
+                    class="px-5 py-2.5 bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
+                  >
+                    Proses
+                  </button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-
-        <!-- Pagination -->
-        <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white">
-          <button class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-            <span>←</span> Previous
-          </button>
-          
-          <div class="flex items-center gap-1">
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-sm font-bold text-gray-900">1</button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">2</button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">3</button>
-            <span class="w-8 h-8 flex items-center justify-center text-gray-400">...</span>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">8</button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">9</button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">10</button>
-          </div>
-
-          <button class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-            Next <span>→</span>
-          </button>
-        </div>
-
       </div>
     </template>
 
-    <!-- DETAIL VIEW -->
     <template v-else-if="currentView === 'detail' && selectedRequest">
-      <div class="space-y-6">
-        
-        <!-- Back Button -->
-        <button @click="goBack" class="flex items-center text-gray-600 hover:text-gray-900 transition-colors mb-2">
-          <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+      <div class="space-y-6 max-w-4xl mx-auto">
+        <button @click="goBack" class="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors mb-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+          Kembali ke Daftar
         </button>
 
-        <!-- Top Section: User & Saldo -->
         <div class="flex flex-col lg:flex-row gap-6">
-          <!-- User Card -->
-          <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex-1 flex items-center justify-between">
-            <div class="flex items-center gap-5">
-              <div class="w-16 h-16 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center">
-                <!-- User Avatar Placeholder -->
-                <svg class="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-              </div>
-              <h2 class="text-2xl font-black text-gray-900">{{ selectedRequest.vendor }}</h2>
+          <div class="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 flex-1 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Pemilik Toko</span>
+              <h2 class="text-2xl font-extrabold text-gray-900 mt-1">{{ selectedRequest.merchant?.shopName }}</h2>
+              <p class="text-xs text-gray-400 mt-1">ID Merchant: #{{ selectedRequest.merchant?.id }}</p>
             </div>
-            <button class="px-6 py-2.5 bg-[#2A437E] hover:bg-[#1e305a] text-white text-sm font-bold rounded-lg transition-colors">
-              Lihat Profil
-            </button>
           </div>
 
-          <!-- Saldo Card -->
-          <div class="bg-[#1C64F2] rounded-2xl p-6 shadow-md text-white flex-1 relative overflow-hidden">
-            <!-- Decorative circle -->
-            <div class="absolute -right-10 -top-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-            
-            <p class="text-sm text-blue-100 mb-1">Total Saldo</p>
-            <h3 class="text-3xl font-bold mb-6">{{ selectedRequest.saldo }}</h3>
-            
-            <p class="text-xs text-blue-200 mb-1 uppercase tracking-wider font-semibold">JUMLAH PENARIKAN</p>
-            <p class="text-xl font-bold">{{ selectedRequest.penarikan }}</p>
+          <div class="bg-gradient-to-br from-blue-600 to-[#1E3A8A] rounded-3xl p-8 shadow-lg text-white flex-1 relative overflow-hidden">
+            <span class="text-xs text-blue-200 uppercase tracking-widest font-bold block">Nominal Pencairan</span>
+            <h3 class="text-3xl font-extrabold mt-2">{{ formatCurrency(selectedRequest.amount) }}</h3>
           </div>
         </div>
 
-        <!-- Detail Pembayaran -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-            <svg class="w-5 h-5 text-[#2A437E]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
-            <h3 class="font-bold text-gray-900">Detail Pembayaran</h3>
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="px-8 py-5 border-b border-gray-50 flex items-center gap-2">
+            <svg class="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
+            <h3 class="font-bold text-gray-900">Rekening Tujuan Transfer</h3>
           </div>
-          <div class="p-6">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-6">
+          <div class="p-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <p class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">BANK NAME</p>
-                <p class="font-bold text-gray-900">{{ selectedRequest.bank }}</p>
+                <p class="text-xs text-gray-400 font-bold uppercase tracking-wider">BANK NAME</p>
+                <p class="font-extrabold text-gray-800 mt-1">{{ selectedRequest.bankAccount?.bankName }}</p>
               </div>
               <div>
-                <p class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">NAMA PENERIMA</p>
-                <p class="font-bold text-gray-900">{{ selectedRequest.penerima }}</p>
+                <p class="text-xs text-gray-400 font-bold uppercase tracking-wider">ACCOUNT NUMBER</p>
+                <p class="font-extrabold text-gray-800 mt-1">{{ selectedRequest.bankAccount?.accountNumber }}</p>
               </div>
               <div>
-                <p class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">ACCOUNT NUMBER</p>
-                <p class="font-bold text-gray-900">{{ selectedRequest.norek }}</p>
+                <p class="text-xs text-gray-400 font-bold uppercase tracking-wider">NAMA PENERIMA</p>
+                <p class="font-extrabold text-gray-800 mt-1">{{ selectedRequest.bankAccount?.accountHolderName }}</p>
               </div>
             </div>
           </div>
-          <div class="bg-gray-50/80 px-6 py-4 border-t border-gray-100 flex gap-3 text-sm text-gray-500">
-            <svg class="w-5 h-5 text-gray-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <p>Pastikan detail rekening sesuai dengan data Anda sebelum memproses transfer.<br>Verifikasi kembali nama penerima dengan data registrasi perusahaan.</p>
-          </div>
         </div>
 
-        <!-- Request Summary -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-100">
-            <h3 class="font-bold text-gray-900">Request Summary</h3>
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-6">
+          <div>
+            <h3 class="font-bold text-gray-900 text-lg">Proses Penarikan</h3>
+            <p class="text-sm text-gray-500 mt-1">Masukkan URL bukti transfer untuk menyetujui, atau tolak penarikan jika bermasalah.</p>
           </div>
-          <div class="p-6 space-y-4">
-            <div class="flex justify-between text-sm">
-              <span class="text-gray-500 font-medium">Jumlah Diminta</span>
-              <span class="font-bold text-gray-900">{{ selectedRequest.reqSummary.diminta }}</span>
+
+          <div class="space-y-4">
+            <div class="space-y-2">
+              <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider">URL Bukti Transfer</label>
+              <input 
+                v-model="proofUrl"
+                type="text"
+                placeholder="Masukkan link/url bukti pembayaran..."
+                class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none text-sm transition-all"
+              />
             </div>
-            <div class="flex justify-between text-sm">
-              <span class="text-gray-500 font-medium">Biaya Layanan (0,5%)</span>
-              <span class="font-bold text-red-500">{{ selectedRequest.reqSummary.biaya }}</span>
+
+            <div v-if="errorMsg" class="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-medium">
+              {{ errorMsg }}
             </div>
-            <div class="flex justify-between text-sm">
-              <span class="text-gray-500 font-medium">Potongan Pajak</span>
-              <span class="font-bold text-red-500">{{ selectedRequest.reqSummary.pajak }}</span>
+
+            <div class="flex justify-end gap-3 pt-2">
+              <button 
+                @click="handleReject"
+                :disabled="rejectWithdrawalMutation.isPending.value || completeWithdrawalMutation.isPending.value"
+                class="px-6 py-3.5 bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 font-bold rounded-xl text-sm transition-all"
+              >
+                Tolak Penarikan
+              </button>
+              <button 
+                @click="handleComplete"
+                :disabled="completeWithdrawalMutation.isPending.value || rejectWithdrawalMutation.isPending.value || !proofUrl.trim()"
+                class="px-8 py-3.5 bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-sm"
+              >
+                Setujui & Selesaikan
+              </button>
             </div>
-          </div>
-          <div class="px-6 py-5 border-t border-gray-100 flex justify-between items-center">
-            <span class="font-bold text-gray-900">Total Dibayarkan</span>
-            <span class="text-xl font-bold text-[#1C64F2]">{{ selectedRequest.reqSummary.total }}</span>
           </div>
         </div>
-
-        <!-- Verifikasi Pembayaran (Opsional) -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 class="font-bold text-gray-900 text-lg mb-1">Verifikasi Pembayaran (Opsional)</h3>
-          <p class="text-sm text-gray-500 mb-6">Setelah melakukan pembayaran, unggah bukti transfer dan tandai permintaan ini sebagai selesai.</p>
-          
-          <div class="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center bg-gray-50/50 hover:bg-gray-50 transition-colors cursor-pointer">
-            <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-              <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            </div>
-            <p class="font-bold text-gray-900 mb-1">Drag and drop your files</p>
-            <p class="text-xs text-gray-400 mb-4">JPEG, PNG, PDF, and MP4 formats, up to 50MB</p>
-            <button class="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 shadow-sm">
-              Select File
-            </button>
-          </div>
-        </div>
-
-        <!-- Action Button -->
-        <div class="flex justify-end pt-2 pb-8">
-          <button 
-            @click="markAsCompleted"
-            :disabled="selectedRequest.status === 'Selesai'"
-            class="px-8 py-3.5 bg-[#2A437E] hover:bg-[#1e305a] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg shadow-sm transition-colors"
-          >
-            TANDAI SELESAI
-          </button>
-        </div>
-
       </div>
     </template>
-
   </div>
 </template>
 
 <style scoped>
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>

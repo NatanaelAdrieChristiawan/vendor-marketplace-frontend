@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
-const { profileQuery, submitKybMutation } = useAuth()
+const { profileQuery, submitKybMutation, uploadFile } = useAuth()
 
 const merchant = computed(() => profileQuery.data.value?.merchant)
 const status = computed(() => merchant.value?.status || 'INCOMPLETE')
@@ -27,16 +27,49 @@ const parsedKyb = computed(() => {
   }
 })
 
-const kybDocumentUrl = ref('')
+const kybFile = ref<File | null>(null)
+const kybPreview = ref('')
 const portfolioUrl = ref('')
+const isSubmitting = ref(false)
+const errorMessage = ref('')
+
+function handleKybFile(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  kybFile.value = f
+  kybPreview.value = f.name
+}
+
+function dropKybFile(e: DragEvent) {
+  e.preventDefault()
+  const f = e.dataTransfer?.files?.[0]
+  if (!f) return
+  kybFile.value = f
+  kybPreview.value = f.name
+}
 
 async function handleKybSubmit() {
-  if (!kybDocumentUrl.value || !portfolioUrl.value) return
-  
-  submitKybMutation.mutate({
-    kybDocumentUrl: kybDocumentUrl.value,
-    portfolioUrl: portfolioUrl.value
-  })
+  if (!kybFile.value) {
+    errorMessage.value = 'Silakan pilih dokumen KTM / SK Organisasi terlebih dahulu.'
+    return
+  }
+  isSubmitting.value = true
+  errorMessage.value = ''
+
+  try {
+    const uploadRes = await uploadFile(kybFile.value, 'merchant-assets')
+    const fileUrl = uploadRes.url
+
+    await submitKybMutation.mutateAsync({
+      kybDocumentUrl: fileUrl,
+      portfolioUrl: portfolioUrl.value || ''
+    })
+  } catch (err: any) {
+    console.error('Error submitting KYB:', err)
+    errorMessage.value = err?.response?.data?.message || 'Gagal mengirimkan dokumen verifikasi KYB.'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 function docStatusLabel(s: string) {
@@ -127,8 +160,20 @@ function docStatusClass(s: string) {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
         <div class="pv-doc__info">
-          <span class="pv-doc__name">KTM / SK Organisasi</span>
-          <input v-if="status === 'INCOMPLETE' || status === 'REJECTED'" v-model="kybDocumentUrl" class="field__input text-xs" placeholder="URL Dokumen (KTM/SK)" />
+          <span class="pv-doc__name" style="margin-bottom: 0.375rem;">KTM / SK Organisasi</span>
+          <div v-if="status === 'INCOMPLETE' || status === 'REJECTED'">
+            <div class="pv-upload-box" @click="($refs.kybFileInput as HTMLInputElement).click()" @dragover.prevent @drop="dropKybFile($event)">
+              <template v-if="kybPreview">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span class="pv-upload-box__text" style="color:#10B981">{{ kybPreview }}</span>
+              </template>
+              <template v-else>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span class="pv-upload-box__text">Klik / Taruh berkas KTM/SK di sini</span>
+              </template>
+            </div>
+            <input ref="kybFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" hidden @change="handleKybFile($event)" />
+          </div>
           <span v-else class="pv-doc__file">{{ parsedKyb?.kybDocumentUrl || 'Sedang diverifikasi' }}</span>
         </div>
         <span class="doc-badge" :class="docStatusClass(status)">{{ docStatusLabel(status) }}</span>
@@ -140,11 +185,16 @@ function docStatusClass(s: string) {
         </div>
         <div class="pv-doc__info">
           <span class="pv-doc__name">Portofolio</span>
-          <input v-if="status === 'INCOMPLETE' || status === 'REJECTED'" v-model="portfolioUrl" class="field__input text-xs" placeholder="URL Portofolio" />
+          <input v-if="status === 'INCOMPLETE' || status === 'REJECTED'" v-model="portfolioUrl" class="field__input text-xs" placeholder="URL Portofolio (misal: https://behance.net/username)" style="margin-top:.375rem" />
           <span v-else class="pv-doc__file">{{ parsedKyb?.portfolioUrl || 'Sedang diverifikasi' }}</span>
         </div>
         <span class="doc-badge" :class="docStatusClass(status)">{{ docStatusLabel(status) }}</span>
       </div>
+    </div>
+
+    <!-- Error Message -->
+    <div v-if="errorMessage" class="pv-error-inline">
+      {{ errorMessage }}
     </div>
 
     <!-- Catatan Validator -->
@@ -168,10 +218,10 @@ function docStatusClass(s: string) {
       <button 
         v-else-if="status === 'INCOMPLETE' || status === 'REJECTED'" 
         class="pv-btn pv-btn--blue" 
-        :disabled="submitKybMutation.isPending.value"
+        :disabled="isSubmitting"
         @click="handleKybSubmit"
       >
-        {{ submitKybMutation.isPending.value ? 'Memproses...' : 'Kirim Verifikasi' }}
+        {{ isSubmitting ? 'Memproses...' : 'Kirim Verifikasi' }}
       </button>
     </div>
   </div>
@@ -276,6 +326,13 @@ function docStatusClass(s: string) {
 .pv-btn--blue:hover { background:#BFDBFE; }
 .pv-btn--green { background:#059669; color:#fff; }
 .pv-btn--green:hover { background:#047857; transform:translateY(-1px); box-shadow:0 4px 12px rgba(5,150,105,.3); }
+
+.pv-upload-box { border:1.5px dashed #D1D5DB; border-radius:8px; padding:.75rem 1rem; display:flex; align-items:center; gap:.5rem; cursor:pointer; transition:all .2s; background:#F9FAFB; margin-top:.375rem; }
+.pv-upload-box:hover { border-color:#2563EB; background:#F8FAFF; }
+.pv-upload-box__text { font-size:.75rem; font-weight:600; color:#475569; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px; }
+.field__input { width:100%; padding:.5rem .75rem; border:1.5px solid #D1D5DB; border-radius:8px; font-family:inherit; font-size:.75rem; color:#0F172A; background:#fff; outline:none; transition:all .2s; box-sizing:border-box; }
+.field__input:focus { border-color:#2563EB; box-shadow:0 0 0 3px rgba(37,99,235,.1); }
+.pv-error-inline { color:#DC2626; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:10px; padding:.75rem 1rem; font-size:.8rem; font-weight:600; margin-bottom:1rem; animation:fadeUp .3s ease both; }
 
 @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 @media (max-width:640px) { .pv-page { padding:1rem 1rem 5rem; } }

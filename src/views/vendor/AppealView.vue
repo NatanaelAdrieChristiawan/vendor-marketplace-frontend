@@ -1,158 +1,149 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useAppeals } from '../../composables/useAppeals'
+import api from '../../api/axios'
 
 const router = useRouter()
+const route = useRoute()
+const orderId = Number(route.params.id)
+const order = ref<any>(null)
+const isLoading = ref(true)
+const errorMsg = ref('')
+const appealReason = ref('')
 
-// Mock data
-const orderId = '#ORD-8829'
-const orderTitle = 'Desain Logo'
-const orderPrice = 'Rp 750.000'
-const decisionDate = '30 April 2026, 09:14'
-const resolvedDate = '30 April 2026, 14:22'
+const { createAppealMutation } = useAppeals()
 
-// Toggle for demonstration: 'win' or 'lose'
-const disputeResult = ref<'win' | 'lose'>('win')
+async function loadOrder() {
+  try {
+    isLoading.value = true
+    const res = await api.get('/orders/incoming')
+    const found = res.data.find((o: any) => o.id === orderId)
+    if (found) {
+      order.value = found
+    } else {
+      errorMsg.value = 'Pesanan tidak ditemukan.'
+    }
+  } catch (err) {
+    errorMsg.value = 'Gagal memuat data pesanan.'
+  } finally {
+    isLoading.value = false
+  }
+}
 
-function toggleResult() {
-  disputeResult.value = disputeResult.value === 'win' ? 'lose' : 'win'
+async function submitAppeal() {
+  if (!appealReason.value.trim()) return
+  try {
+    await createAppealMutation.mutateAsync({
+      orderId,
+      reason: appealReason.value
+    })
+    router.push('/vendor/orders')
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Gagal mengajukan banding.'
+  }
 }
 
 function goBack() {
-  router.push('/vendor/orders')
+  router.push(`/vendor/orders/${orderId}`)
 }
+
+loadOrder()
 </script>
 
 <template>
-  <div class="py-6 px-4 max-w-5xl">
-    <!-- Back Button & Breadcrumbs -->
+  <div class="py-8 px-4 max-w-3xl mx-auto font-sans animate-fade-in">
     <div class="flex items-center gap-2 text-sm text-gray-500 mb-6">
       <button @click="goBack" class="hover:text-gray-900 transition-colors p-1 -ml-1">
         <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
       </button>
-      <span>Sengketa</span>
+      <span>Pesanan</span>
       <span class="mx-1">&rsaquo;</span>
-      <span class="font-bold text-gray-900">{{ orderId }}</span>
+      <span class="font-bold text-gray-900">#{{ orderId }}</span>
+      <span class="mx-1">&rsaquo;</span>
+      <span class="text-gray-900">Ajukan Banding</span>
     </div>
 
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-[32px] font-bold text-gray-900">
-        {{ orderId }} | {{ orderTitle }}
-      </h1>
-      <span
-        v-if="disputeResult === 'win'"
-        class="px-4 py-1.5 text-xs font-bold text-[#059669] bg-[#ECFDF5] border border-[#A7F3D0] rounded-full uppercase tracking-wider"
-      >
-        COMPLETED
-      </span>
-      <span
-        v-else
-        class="px-4 py-1.5 text-xs font-bold text-[#E11D48] bg-[#FFF1F2] border border-[#FECDD3] rounded-full uppercase tracking-wider"
-      >
-        CANCELLED
-      </span>
+    <div v-if="isLoading" class="p-12 text-center text-gray-500">
+      Memuat data pesanan...
     </div>
 
-    <div class="space-y-6">
-      <!-- Verdict Banner -->
-      <div
-        v-if="disputeResult === 'win'"
-        class="bg-[#F0FDF4] border border-[#BBF7D0] rounded-2xl p-6 flex items-start gap-4"
-      >
-        <div class="w-10 h-10 rounded-full bg-[#86EFAC] text-[#166534] flex items-center justify-center shrink-0 mt-1">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
+    <div v-else-if="errorMsg && !order" class="p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
+      {{ errorMsg }}
+    </div>
+
+    <div v-else-if="order" class="space-y-6">
+      <div class="flex items-center justify-between mb-2">
+        <h1 class="text-3xl font-bold text-gray-900">
+          Ajukan Banding
+        </h1>
+        <span class="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 rounded-full uppercase tracking-wider">
+          {{ order.status }}
+        </span>
+      </div>
+
+      <div class="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm space-y-6">
+        <div class="flex justify-between items-center border-b border-gray-100 pb-4">
+          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">GIG / LAYANAN</span>
+          <span class="text-sm font-bold text-gray-800">{{ order.gig?.title || 'Pesanan Langsung' }}</span>
         </div>
-        <div>
-          <h3 class="text-[18px] font-bold text-[#166534] mb-1">Kamu memenangkan kasus ini</h3>
-          <p class="text-sm font-medium text-[#166534]/80 mb-3">REJECT-COMPLAINT - {{ resolvedDate }}</p>
-          <p class="text-sm text-[#166534] leading-relaxed">
-            Admin Validator telah memutuskan bahwa komplain client tidak valid. Hasil kerja kamu dinilai sudah sesuai brief yang disepakati.
-          </p>
+
+        <div class="flex justify-between items-center border-b border-gray-100 pb-4">
+          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">KLIEN</span>
+          <span class="text-sm font-medium text-gray-800">{{ order.client?.fullName }}</span>
+        </div>
+
+        <div class="flex justify-between items-center border-b border-gray-100 pb-4">
+          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">TOTAL PESANAN</span>
+          <span class="text-base font-bold text-[#1E3A8A]">Rp {{ Number(order.totalAmount).toLocaleString() }}</span>
         </div>
       </div>
 
-      <div
-        v-else
-        class="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl p-6 flex items-start gap-4"
-      >
-        <div class="w-10 h-10 rounded-full bg-[#FECACA] text-[#991B1B] flex items-center justify-center shrink-0 mt-1">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
-        </div>
+      <form @submit.prevent="submitAppeal" class="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm space-y-6">
         <div>
-          <h3 class="text-[18px] font-bold text-[#991B1B] mb-1">Kasus Ditutup</h3>
-          <p class="text-sm font-medium text-[#991B1B]/80 mb-3">ACCEPT-COMPLAINT - {{ resolvedDate }}</p>
-          <p class="text-sm text-[#991B1B] leading-relaxed">
-            Admin Validator telah memutuskan bahwa komplain client valid. Dana akan dikembalikan kepada client.
-          </p>
+          <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Alasan Pengajuan Banding</label>
+          <textarea
+            v-model="appealReason"
+            required
+            rows="6"
+            placeholder="Jelaskan secara detail argumen dan bukti mengapa keputusan sengketa tidak adil..."
+            class="block w-full px-4 py-3 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-gray-400"
+          ></textarea>
         </div>
-      </div>
 
-      <!-- Details Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Dana Order Card -->
-        <div class="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6">DANA ORDER</h4>
-          <div
-            class="rounded-2xl p-6 flex items-center justify-between"
-            :class="disputeResult === 'win' ? 'bg-[#F8FAFC]' : 'bg-[#FFF1F2]'"
+        <div v-if="errorMsg" class="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
+          {{ errorMsg }}
+        </div>
+
+        <div class="flex justify-end gap-4">
+          <button
+            type="button"
+            @click="goBack"
+            class="px-6 py-3 border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold rounded-xl transition-colors text-sm"
           >
-            <div>
-              <p class="text-sm font-medium text-gray-500 mb-1">Total nilai order</p>
-              <p class="text-3xl font-bold text-[#991B1B]" v-if="disputeResult === 'lose'">{{ orderPrice }}</p>
-              <p class="text-3xl font-bold text-gray-900" v-else>{{ orderPrice }}</p>
-            </div>
-            
-            <span
-              v-if="disputeResult === 'win'"
-              class="px-4 py-1.5 text-[11px] font-bold text-[#059669] bg-[#ECFDF5] border border-[#A7F3D0] rounded-full uppercase tracking-widest"
-            >
-              SELESAI
-            </span>
-            <span
-              v-else
-              class="px-4 py-1.5 text-[11px] font-bold text-[#E11D48] bg-transparent border border-[#E11D48] rounded-full uppercase tracking-widest"
-            >
-              Refund
-            </span>
-          </div>
+            Batal
+          </button>
+          <button
+            type="submit"
+            :disabled="createAppealMutation.isPending.value || !appealReason.trim()"
+            class="px-8 py-3 bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-sm text-sm"
+          >
+            {{ createAppealMutation.isPending.value ? 'Mengirim...' : 'Kirim Banding' }}
+          </button>
         </div>
-
-        <!-- Detail Order Card -->
-        <div class="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-8">DETAIL ORDER</h4>
-          
-          <div class="space-y-6">
-            <div class="flex items-center justify-between pb-6 border-b border-gray-100">
-              <span class="text-sm font-bold text-gray-500">Keputusan</span>
-              <span class="text-sm font-bold text-gray-900">{{ decisionDate }}</span>
-            </div>
-            
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-bold text-gray-500">Status Order</span>
-              <span
-                v-if="disputeResult === 'win'"
-                class="px-4 py-1.5 text-[11px] font-bold text-[#059669] bg-[#ECFDF5] border border-[#A7F3D0] rounded-full uppercase tracking-widest"
-              >
-                SELESAI
-              </span>
-              <span
-                v-else
-                class="px-4 py-1.5 text-[11px] font-bold text-[#E11D48] bg-[#FFF1F2] border border-[#FECDD3] rounded-full uppercase tracking-widest"
-              >
-                CANCELLED
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Temporary button to toggle state for demonstration -->
-    <div class="mt-12 text-center">
-      <button @click="toggleResult" class="text-xs font-bold text-gray-400 hover:text-gray-600 underline">
-        Toggle Win/Lose State (Demo)
-      </button>
+      </form>
     </div>
   </div>
 </template>
+
+<style scoped>
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
+

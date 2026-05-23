@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCategories } from '../../composables/useCategories'
 import Toast from '../../components/ui/Toast.vue'
+import api from '../../api/axios'
+import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
+const { uploadFile } = useAuth()
+const { data: categories, isLoading: isLoadingCategories } = useCategories()
+
 const title = ref('')
 const description = ref('')
-const category = ref('')
+const categoryId = ref<number | ''>('')
 const showToast = ref(false)
 const toastData = reactive<{type: 'info' | 'success' | 'error', title: string, subtitle: string}>({
   type: 'info',
@@ -14,25 +20,26 @@ const toastData = reactive<{type: 'info' | 'success' | 'error', title: string, s
   subtitle: ''
 })
 
-const categories = [
-  'Desain Grafis',
-  'Pengembangan Web',
-  'Penulisan & Konten',
-  'Video & Animasi',
-  'Fotografi',
-  'Pemasaran Digital',
-  'Konsultasi Bisnis',
-  'Lainnya',
-]
+const isSubmitting = ref(false)
 
 const tiers = ref([
-  { id: 'TIER 01', name: 'Basic', price: '0.00', features: '' },
-  { id: 'TIER 02', name: 'Standard', price: '0.00', features: '', isHighlighted: true },
-  { id: 'TIER 03', name: 'Premium', price: '0.00', features: '' },
+  { id: '01', name: 'Basic', price: '', features: '', isHighlighted: false },
+  { id: '02', name: 'Standard', price: '', features: '', isHighlighted: true },
+  { id: '03', name: 'Premium', price: '', features: '', isHighlighted: false },
 ])
 
 const isDragging = ref(false)
 const uploadedFiles = ref<{ name: string; size: string }[]>([])
+const rawFiles = ref<File[]>([])
+
+const showErrorToast = (title: string, subtitle: string) => {
+  toastData.type = 'error'
+  toastData.title = title
+  toastData.subtitle = subtitle
+  showToast.value = true
+  setTimeout(() => { showToast.value = false }, 3000)
+}
+
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false
@@ -53,12 +60,14 @@ function processFiles(files: FileList) {
         name: f.name,
         size: (f.size / 1024 / 1024).toFixed(1) + ' MB'
       })
+      rawFiles.value.push(f)
     }
   }
 }
 
 function removeFile(idx: number) {
   uploadedFiles.value.splice(idx, 1)
+  rawFiles.value.splice(idx, 1)
 }
 
 function handleSaveDraft() {
@@ -69,14 +78,101 @@ function handleSaveDraft() {
   setTimeout(() => { showToast.value = false }, 3000)
 }
 
-function handleComplete() {
-  toastData.type = 'success'
-  toastData.title = 'Berhasil Terbit'
-  toastData.subtitle = 'Layanan Anda sedang dikirim untuk moderasi'
+async function handleComplete() {
+  if (!title.value.trim()) {
+    showErrorToast('Judul Wajib Diisi', 'Silakan masukkan nama layanan')
+    return
+  }
+  if (!description.value.trim()) {
+    showErrorToast('Deskripsi Wajib Diisi', 'Silakan tulis deskripsi layanan')
+    return
+  }
+  if (!categoryId.value) {
+    showErrorToast('Kategori Wajib Diisi', 'Silakan pilih kategori layanan')
+    return
+  }
+  if (rawFiles.value.length === 0) {
+    showErrorToast('Media Portofolio Wajib', 'Harap unggah minimal satu berkas portofolio utama')
+    return
+  }
+
+  isSubmitting.value = true
+  toastData.type = 'info'
+  toastData.title = 'Mengunggah Berkas...'
+  toastData.subtitle = 'Sedang mengunggah portofolio ke cloud storage'
   showToast.value = true
-  setTimeout(() => {
-    router.push('/vendor/catalog')
-  }, 2000)
+
+  try {
+    // 1. Upload main media file
+    const firstFile = rawFiles.value[0]
+    if (!firstFile) {
+      throw new Error('Berkas portofolio utama tidak ditemukan')
+    }
+    const mainUploadRes = await uploadFile(firstFile, 'merchant-assets')
+    const mainImageUrl = mainUploadRes.url || mainUploadRes.data?.url
+    if (!mainImageUrl) {
+      throw new Error('Gagal mendapatkan URL gambar utama')
+    }
+
+    // 2. Upload secondary media files
+    const extraMediaUrls: string[] = []
+    for (let i = 1; i < rawFiles.value.length; i++) {
+      const file = rawFiles.value[i]
+      if (file) {
+        const extraRes = await uploadFile(file, 'merchant-assets')
+        const extraUrl = extraRes.url || extraRes.data?.url
+        if (extraUrl) {
+          extraMediaUrls.push(extraUrl)
+        }
+      }
+    }
+
+    // 3. Construct serialized description
+    const serializedDescription = JSON.stringify({
+      text: description.value,
+      tiers: {
+        basic: {
+          price: String(tiers.value.find(t => t.name === 'Basic')?.price || '0'),
+          features: String(tiers.value.find(t => t.name === 'Basic')?.features || '')
+        },
+        standard: {
+          price: String(tiers.value.find(t => t.name === 'Standard')?.price || '0'),
+          features: String(tiers.value.find(t => t.name === 'Standard')?.features || '')
+        },
+        premium: {
+          price: String(tiers.value.find(t => t.name === 'Premium')?.price || '0'),
+          features: String(tiers.value.find(t => t.name === 'Premium')?.features || '')
+        }
+      },
+      extraMedia: extraMediaUrls
+    })
+
+    // 4. Submit to POST /gigs
+    const standardPriceNum = parseFloat(tiers.value.find(t => t.name === 'Standard')?.price || '0')
+    const payload = {
+      categoryId: Number(categoryId.value),
+      title: title.value,
+      description: serializedDescription,
+      price: standardPriceNum,
+      mediaUrls: mainImageUrl
+    }
+
+    await api.post('/gigs', payload)
+
+    toastData.type = 'success'
+    toastData.title = 'Berhasil Terbit'
+    toastData.subtitle = 'Layanan Anda sedang dikirim untuk moderasi'
+    showToast.value = true
+
+    setTimeout(() => {
+      router.push('/vendor/catalog')
+    }, 2000)
+  } catch (err: any) {
+    console.error('Failed to create gig', err)
+    showErrorToast('Gagal Menerbitkan Layanan', err.response?.data?.message || err.message || 'Terjadi kesalahan internal')
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
@@ -122,9 +218,9 @@ function handleComplete() {
       <div class="field-group">
         <label class="field-label">KATEGORI</label>
         <div class="select-wrapper">
-          <select v-model="category" class="field-select">
-            <option value="" disabled>Pilih kategori</option>
-            <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+          <select v-model="categoryId" class="field-select" :disabled="isLoadingCategories">
+            <option value="" disabled>{{ isLoadingCategories ? 'Memuat kategori...' : 'Pilih kategori' }}</option>
+            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
           </select>
           <svg class="select-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
@@ -200,8 +296,10 @@ function handleComplete() {
 
       <!-- Footer Actions -->
       <div class="form-actions">
-        <button class="btn-draft" @click="handleSaveDraft">Simpan Draf</button>
-        <button class="btn-submit" @click="handleComplete">Selesai</button>
+        <button class="btn-draft" :disabled="isSubmitting" @click="handleSaveDraft">Simpan Draf</button>
+        <button class="btn-submit" :disabled="isSubmitting" @click="handleComplete">
+          {{ isSubmitting ? 'Menerbitkan...' : 'Selesai' }}
+        </button>
       </div>
     </div>
   </div>

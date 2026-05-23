@@ -1,35 +1,173 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import api from '../../api/axios'
+import { useOrderById, useCompleteOrder, useSubmitReview } from '../../composables/useOrders'
 
 const route = useRoute()
 const router = useRouter()
 const orderId = route.params.id as string
 
-// Simulated order database
-const ordersDb: Record<string, { title: string; status: string }> = {
-  'ORD-99281': { title: 'Pembuatan Brand Identity & Logo Premium', status: 'in-progress' },
-  'ORD-99280': { title: 'Pembuatan Brand Identity & Logo Premium', status: 'in-progress' },
-  'ORD-99279': { title: 'Pembuatan Brand Identity & Logo Premium', status: 'delivered' },
-}
+const { data: rawOrder, isLoading: isQueryLoading } = useOrderById(orderId)
+const isProcessing = ref(false)
+const isLoading = computed(() => isQueryLoading.value || isProcessing.value)
 
-const order = ordersDb[orderId] || { title: 'Pesanan', status: 'in-progress' }
+const order = computed(() => {
+  if (!rawOrder.value) return null
+  return {
+    ...rawOrder.value,
+    instructions: rawOrder.value.requirements?.notes || 'Tidak ada instruksi khusus dari pembeli.',
+    planName: rawOrder.value.requirements?.plan || 'Standard Plan',
+    chosenPrice: rawOrder.value.requirements?.price || rawOrder.value.totalAmount,
+    requirementsFile: rawOrder.value.requirements?.files || null
+  }
+})
 
-// Status driven by order data
-const status = ref(order.status)
+const status = computed(() => {
+  if (!order.value) return ''
+  const s = order.value.status
+  if (s === 'IN_PROGRESS' || s === 'IN_REVISION' || s === 'DISPUTE_IN_PROGRESS') {
+    return 'in-progress'
+  } else if (s === 'DELIVERED') {
+    return 'delivered'
+  } else if (s === 'COMPLETED') {
+    return 'completed'
+  } else {
+    return s.toLowerCase()
+  }
+})
 
-const countdown = ref({ days: '02', hours: '04', minutes: '12' })
-const deadline = '12 Des 2026, 18:00'
+const countdown = ref({ days: '00', hours: '00', minutes: '00' })
+const deadline = ref('')
 
-const deliveryFiles = [
-  { name: 'Logo', format: 'PNG', size: '2MB' },
-  { name: 'Asset', format: 'PNG', size: '1.5MB' },
-]
-
-const rating = ref(4)
+const rating = ref(5)
 const reviewText = ref('')
 const selectedTip = ref('10%')
 const tipOptions = ['5%', '10%', '15%', 'Kustom']
+
+const completeOrderMutation = useCompleteOrder()
+const submitReviewMutation = useSubmitReview()
+
+function getFilename(url: string) {
+  if (!url) return ''
+  try {
+    const parts = url.split('/')
+    const last = parts[parts.length - 1]
+    if (!last) return 'deliverable'
+    return decodeURIComponent(last.split('?')[0] || '')
+  } catch (e) {
+    return 'deliverable'
+  }
+}
+
+function getFileExtension(url: string) {
+  const filename = getFilename(url)
+  const dotIdx = filename.lastIndexOf('.')
+  return dotIdx !== -1 ? filename.substring(dotIdx + 1).toUpperCase() : 'FILE'
+}
+
+function formatPrice(val: any) {
+  if (!val) return 'Rp 0'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+let timerInterval: any = null
+function startCountdown(targetDate: Date) {
+  if (timerInterval) clearInterval(timerInterval)
+  
+  function update() {
+    const now = new Date().getTime()
+    const dist = targetDate.getTime() - now
+    if (dist < 0) {
+      countdown.value = { days: '00', hours: '00', minutes: '00' }
+      clearInterval(timerInterval)
+      return
+    }
+    
+    const days = Math.floor(dist / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    const minutes = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60))
+    
+    countdown.value = {
+      days: String(days).padStart(2, '0'),
+      hours: String(hours).padStart(2, '0'),
+      minutes: String(minutes).padStart(2, '0')
+    }
+  }
+  
+  update()
+  timerInterval = setInterval(update, 60000)
+}
+
+watch(() => order.value?.deadline, (newVal) => {
+  if (newVal) {
+    deadline.value = formatDate(newVal)
+    startCountdown(new Date(newVal))
+  }
+}, { immediate: true })
+
+watch(() => order.value?.review, (newVal) => {
+  if (newVal) {
+    rating.value = newVal.rating
+    reviewText.value = newVal.comment || ''
+  }
+}, { immediate: true })
+
+async function completeOrder() {
+  try {
+    isProcessing.value = true
+    await completeOrderMutation.mutateAsync(orderId)
+    alert('Pesanan berhasil diselesaikan!')
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Gagal menyelesaikan pesanan.')
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+async function downloadInvoice() {
+  try {
+    const res = await api.get(`/orders/${orderId}/invoice`, { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `invoice-order-${orderId}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  } catch (err) {
+    console.error('Failed to download invoice', err)
+    alert('Gagal mengunduh invoice.')
+  }
+}
+
+async function submitReview() {
+  try {
+    isProcessing.value = true
+    await submitReviewMutation.mutateAsync({
+      orderId: Number(orderId),
+      rating: rating.value,
+      comment: reviewText.value
+    })
+    alert('Ulasan berhasil dikirim!')
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Gagal mengirim ulasan.')
+  } finally {
+    isProcessing.value = false
+  }
+}
 
 function initObserver() {
   const obs = new IntersectionObserver((entries) => {
@@ -38,17 +176,16 @@ function initObserver() {
   document.querySelectorAll('.ai:not(.vis)').forEach((el) => obs.observe(el))
 }
 
-async function setStatus(s: string) {
-  status.value = s
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-  await nextTick()
-  initObserver()
-}
-
 function goBack() { router.push('/pesanan') }
 function goRevision() { router.push(`/pesanan/${orderId}/revisi`) }
 
-onMounted(() => { initObserver() })
+onMounted(() => {
+  initObserver()
+})
+
+onUnmounted(() => {
+  if (timerInterval) clearInterval(timerInterval)
+})
 </script>
 
 <template>
@@ -59,157 +196,275 @@ onMounted(() => { initObserver() })
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
   </button>
 
-  <!-- DEBUG: Status switcher (remove in production) -->
-  <div class="od__debug ai" style="transition-delay:50ms">
-    <button @click="setStatus('in-progress')" :class="{active: status==='in-progress'}">In Progress</button>
-    <button @click="setStatus('delivered')" :class="{active: status==='delivered'}">Delivered</button>
-    <button @click="setStatus('completed')" :class="{active: status==='completed'}">Completed</button>
+  <div v-if="isLoading" class="p-8 text-center bg-white rounded-xl border border-gray-150">
+    <p class="text-gray-500 text-sm">Memuat detail pesanan...</p>
   </div>
 
-  <!-- ============ IN PROGRESS ============ -->
-  <template v-if="status === 'in-progress'">
-    <h1 class="od__title ai" style="transition-delay:80ms">Pembuatan Brand Identity &amp; Logo</h1>
-    <div class="od__grid">
-      <div class="status-card ai" style="transition-delay:160ms">
-        <div class="status-card__icon">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </div>
-        <h2 class="status-card__heading">SEDANG DALAM PROSES</h2>
-        <p class="status-card__desc">Saat ini vendor kami sedang dalam tahap pengerjaan Anda. Kami memastikan setiap detail sesuai dengan arahan awal yang Anda berikan.</p>
-      </div>
-      <div class="side-cards">
-        <div class="timer-card ai" style="transition-delay:240ms">
-          <div class="timer-card__label">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            SISA WAKTU PENGERJAAN
-          </div>
-          <div class="timer-card__boxes">
-            <div class="tbox"><span>{{ countdown.days }}</span><small>HARI</small></div>
-            <div class="tbox"><span>{{ countdown.hours }}</span><small>JAM</small></div>
-            <div class="tbox"><span>{{ countdown.minutes }}</span><small>MENIT</small></div>
-          </div>
-          <p class="timer-card__deadline">Deadline: {{ deadline }}</p>
-        </div>
-        <div class="cancel-card ai" style="transition-delay:320ms">
-          <div class="cancel-card__header">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <strong>Kebijakan Pembatalan</strong>
-          </div>
-          <p>Pembatalan langsung tidak tersedia selama pesanan dalam tahap pengerjaan aktif untuk menghargai waktu vendor.</p>
-          <button class="cancel-card__btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-            Hubungi Customer Service
-          </button>
-        </div>
-      </div>
-    </div>
-  </template>
+  <div v-else-if="!order" class="p-8 text-center bg-white rounded-xl border border-gray-150">
+    <p class="text-gray-500 text-sm">Pesanan tidak ditemukan.</p>
+  </div>
 
-  <!-- ============ DELIVERED ============ -->
-  <template v-if="status === 'delivered'">
-    <div class="delivery-banner ai" style="transition-delay:80ms">
-      <div class="delivery-banner__left">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <div>
-          <h2>Pesanan Selesai!</h2>
-          <p>Vendor telah mengirimkan semua hasil kerja. Cek hasil kerjamu di bawah ini.</p>
+  <template v-else>
+    <!-- ============ IN PROGRESS ============ -->
+    <template v-if="status === 'in-progress'">
+      <!-- Revision Banner if status is IN_REVISION -->
+      <div v-if="order?.status === 'IN_REVISION'" class="delivery-banner ai" style="background: linear-gradient(135deg, #DC2626, #EF4444); margin-bottom: 2rem; border-radius: 16px; padding: 1.5rem 2rem; color: #fff;">
+        <div class="delivery-banner__left">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div>
+            <h2>Permintaan Revisi Terkirim</h2>
+            <p>Umpan balik revisi Anda telah dikirimkan ke vendor. Menunggu vendor mengirimkan hasil pekerjaan baru.</p>
+          </div>
         </div>
       </div>
-      <span class="delivery-banner__badge">Menunggu</span>
-    </div>
-    <div class="od__grid">
-      <div class="files-card ai" style="transition-delay:160ms">
-        <h3>File Hasil Kerja</h3>
-        <div v-for="f in deliveryFiles" :key="f.name" class="file-row">
-          <div class="file-row__icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          </div>
-          <div class="file-row__info">
-            <strong>{{ f.name }}</strong>
-            <span>File Format: {{ f.format }} &nbsp; File Size: {{ f.size }}</span>
-          </div>
-          <button class="file-row__dl" aria-label="Download">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="shipment-card ai" style="transition-delay:240ms">
-        <h3>Detail Pengiriman</h3>
-        <div class="shipment-row"><span>ID Pesanan</span><strong>#ORD-8812</strong></div>
-        <div class="shipment-row"><span>Waktu Kirim</span><strong>24 Mei 2026, 14:30</strong></div>
-      </div>
-    </div>
-    <div class="delivery-actions ai" style="transition-delay:320ms">
-      <button class="btn-revision" @click="goRevision">Minta Revisi</button>
-      <button class="btn-accept" @click="setStatus('completed')">Terima Pesanan</button>
-    </div>
-  </template>
 
-  <!-- ============ COMPLETED ============ -->
-  <template v-if="status === 'completed'">
-    <div class="complete-banner ai" style="transition-delay:80ms">
-      <div class="complete-banner__left">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <h1 class="od__title ai" style="transition-delay:80ms">{{ order?.gig?.title || 'Pembuatan Brand Identity & Logo' }}</h1>
+      <div class="od__grid">
         <div>
-          <small>STATUS: SELESAI</small>
-          <h2>Dana telah dicairkan ke vendor</h2>
-          <p>Pesanan Anda #ORD-99281 telah diselesaikan. Transaksi telah diamankan dan vendor sudah diberitahu.</p>
-        </div>
-      </div>
-      <div class="complete-banner__total">
-        <small>TOTAL</small>
-        <strong>RP 150.000</strong>
-      </div>
-    </div>
-    <div class="od__grid">
-      <div class="review-section">
-        <div class="review-card ai" style="transition-delay:160ms">
-          <h3>Beri tahu kami pengalaman Anda</h3>
-          <label class="review-label">Tingkat Kepuasan</label>
-          <div class="stars">
-            <svg v-for="s in 5" :key="s" width="28" height="28" viewBox="0 0 24 24" :fill="s <= rating ? '#3B5BDB' : 'none'" :stroke="s <= rating ? '#3B5BDB' : '#D1D5DB'" stroke-width="2" @click="rating = s" style="cursor:pointer"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          </div>
-          <label class="review-label">Bagikan pengalaman Anda</label>
-          <textarea v-model="reviewText" placeholder="Jelaskan kualitas layanan, komunikasi, dan hasil pengerjaan..." rows="4"></textarea>
-          <div class="review-actions">
-            <button class="btn-submit-review">Kirim Ulasan</button>
-            <button class="btn-skip">Nanti saja</button>
-          </div>
-        </div>
-        <div class="tip-card ai" style="transition-delay:240ms">
-          <h3>🎉 Beri Tip</h3>
-          <p>Berikan apresiasi atas layanan yang luar biasa dengan menambahkan tip untuk tim vendor.</p>
-          <div class="tip-options">
-            <button v-for="t in tipOptions" :key="t" class="tip-btn" :class="{ 'tip-btn--active': selectedTip === t }" @click="selectedTip = t">{{ t }}</button>
-          </div>
-        </div>
-      </div>
-      <div class="summary-section">
-        <div class="summary-card ai" style="transition-delay:160ms">
-          <div class="summary-card__header">Ringkasan Pesanan</div>
-          <div class="summary-card__body">
-            <h4>Desain UI/UX Landing Page Bisnis (3 Halaman)</h4>
-            <div class="summary-row muted">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              Selesai dalam 3 Hari Kerja
+          <div class="status-card ai" style="transition-delay:160ms">
+            <div class="status-card__icon">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
-            <div class="summary-row"><span>Subtotal Jasa</span><span>Rp 1.750.000</span></div>
-            <div class="summary-row"><span>Biaya Layanan</span><span>Rp 25.000</span></div>
-            <div class="summary-row total"><span>Total Harga</span><strong>RP 150.000</strong></div>
-            <button class="btn-pay">Bayar &amp; Selesaikan Pesanan</button>
+            <h2 class="status-card__heading">SEDANG DALAM PROSES</h2>
+            <p class="status-card__desc">Saat ini vendor kami sedang dalam tahap pengerjaan pesanan Anda. Kami memastikan setiap detail sesuai dengan arahan awal yang Anda berikan.</p>
+          </div>
+
+          <!-- Files Card (Deliverables) -->
+          <div v-if="order?.deliverables?.length" class="files-card ai" style="margin-top: 1.5rem; transition-delay:200ms">
+            <h3>File Hasil Kerja (Sebelumnya)</h3>
+            <div v-for="f in order?.deliverables" :key="f.id" class="file-row">
+              <div class="file-row__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="file-row__info">
+                <strong>{{ getFilename(f.fileUrl) }}</strong>
+                <span>Format: {{ getFileExtension(f.fileUrl) }} &nbsp; Pesan: {{ f.message || '-' }}</span>
+              </div>
+              <a :href="f.fileUrl" target="_blank" download class="file-row__dl" aria-label="Download">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </a>
+            </div>
+          </div>
+
+          <!-- Revision History Card -->
+          <div v-if="order?.revisionHistory?.length" class="files-card ai" style="margin-top: 1.5rem; transition-delay:220ms">
+            <h3>Riwayat Revisi</h3>
+            <div v-for="(rev, idx) in order.revisionHistory" :key="idx" class="revision-log-row" style="border-left: 3px solid #DC2626; padding-left: 1rem; margin-bottom: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #DC2626;">{{ rev.label }}</span>
+                <span style="font-size: 0.75rem; color: #9CA3AF;">{{ rev.time }}</span>
+              </div>
+              <p style="font-size: 0.875rem; color: #374151; margin: 0 0 0.5rem 0;">{{ rev.message }}</p>
+              <div v-if="rev.attachments && rev.attachments.length" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 600; color: #4B5563;">File Referensi:</span>
+                <div v-for="att in rev.attachments" :key="att" class="file-row" style="padding: 0.5rem; margin-bottom: 0.5rem;">
+                  <div class="file-row__icon" style="width: 28px; height: 28px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div class="file-row__info">
+                    <strong style="font-size: 0.75rem;">{{ getFilename(att) }}</strong>
+                  </div>
+                  <a :href="att" target="_blank" download class="file-row__dl" style="padding: 2px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="invoice-card ai" style="transition-delay:240ms">
-          <div class="invoice-card__inner">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <div><strong>Unduh Invoice</strong><small>PDF • 1.4 MB</small></div>
+        <div class="side-cards">
+          <div class="timer-card ai" style="transition-delay:240ms">
+            <div class="timer-card__label">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              SISA WAKTU PENGERJAAN
+            </div>
+            <div class="timer-card__boxes">
+              <div class="tbox"><span>{{ countdown.days }}</span><small>HARI</small></div>
+              <div class="tbox"><span>{{ countdown.hours }}</span><small>JAM</small></div>
+              <div class="tbox"><span>{{ countdown.minutes }}</span><small>MENIT</small></div>
+            </div>
+            <p class="timer-card__deadline">Deadline: {{ deadline }}</p>
           </div>
-          <button aria-label="Download invoice">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </button>
+          <div class="cancel-card ai" style="transition-delay:320ms">
+            <div class="cancel-card__header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <strong>Kebijakan Pembatalan</strong>
+            </div>
+            <p>Pembatalan langsung tidak tersedia selama pesanan dalam tahap pengerjaan aktif untuk menghargai waktu vendor.</p>
+            <button class="cancel-card__btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+              Hubungi Customer Service
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
+
+    <!-- ============ DELIVERED ============ -->
+    <template v-if="status === 'delivered'">
+      <div class="delivery-banner ai" style="transition-delay:80ms">
+        <div class="delivery-banner__left">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div>
+            <h2>Pesanan Dikirim!</h2>
+            <p>Vendor telah mengirimkan hasil kerja. Cek hasil kerjamu di bawah ini.</p>
+          </div>
+        </div>
+        <span class="delivery-banner__badge">Menunggu Review</span>
+      </div>
+      <div class="od__grid">
+        <div>
+          <div class="files-card ai" style="transition-delay:160ms">
+            <h3>File Hasil Kerja</h3>
+            <div v-for="f in order?.deliverables" :key="f.id" class="file-row">
+              <div class="file-row__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="file-row__info">
+                <strong>{{ getFilename(f.fileUrl) }}</strong>
+                <span>Format: {{ getFileExtension(f.fileUrl) }} &nbsp; Pesan: {{ f.message || '-' }}</span>
+              </div>
+              <a :href="f.fileUrl" target="_blank" download class="file-row__dl" aria-label="Download">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </a>
+            </div>
+            <div v-if="!order?.deliverables?.length" class="text-gray-400 text-sm">
+              Belum ada berkas terkirim.
+            </div>
+          </div>
+
+          <!-- Revision History Card -->
+          <div v-if="order?.revisionHistory?.length" class="files-card ai" style="margin-top: 1.5rem; transition-delay:200ms">
+            <h3>Riwayat Revisi</h3>
+            <div v-for="(rev, idx) in order.revisionHistory" :key="idx" class="revision-log-row" style="border-left: 3px solid #DC2626; padding-left: 1rem; margin-bottom: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #DC2626;">{{ rev.label }}</span>
+                <span style="font-size: 0.75rem; color: #9CA3AF;">{{ rev.time }}</span>
+              </div>
+              <p style="font-size: 0.875rem; color: #374151; margin: 0 0 0.5rem 0;">{{ rev.message }}</p>
+              <div v-if="rev.attachments && rev.attachments.length" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.75rem; font-weight: 600; color: #4B5563;">File Referensi:</span>
+                <div v-for="att in rev.attachments" :key="att" class="file-row" style="padding: 0.5rem; margin-bottom: 0.5rem;">
+                  <div class="file-row__icon" style="width: 28px; height: 28px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div class="file-row__info">
+                    <strong style="font-size: 0.75rem;">{{ getFilename(att) }}</strong>
+                  </div>
+                  <a :href="att" target="_blank" download class="file-row__dl" style="padding: 2px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="shipment-card ai" style="transition-delay:240ms">
+          <h3>Detail Pengiriman</h3>
+          <div class="shipment-row"><span>ID Pesanan</span><strong>#ORD-{{ order?.id }}</strong></div>
+          <div class="shipment-row"><span>Waktu Kirim</span><strong>{{ formatDate(order?.deliveredAt) }}</strong></div>
+        </div>
+      </div>
+      <div class="delivery-actions ai" style="transition-delay:320ms">
+        <button class="btn-revision" @click="goRevision">Minta Revisi</button>
+        <button class="btn-accept" @click="completeOrder">Terima Pesanan</button>
+      </div>
+    </template>
+
+    <!-- ============ COMPLETED ============ -->
+    <template v-if="status === 'completed'">
+      <div class="complete-banner ai" style="transition-delay:80ms">
+        <div class="complete-banner__left">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div>
+            <small>STATUS: SELESAI</small>
+            <h2>Dana telah dicairkan ke vendor</h2>
+            <p>Pesanan Anda #ORD-{{ order?.id }} telah diselesaikan. Transaksi telah diamankan dan vendor sudah diberitahu.</p>
+          </div>
+        </div>
+        <div class="complete-banner__total">
+          <small>TOTAL</small>
+          <strong>{{ formatPrice(order?.totalAmount) }}</strong>
+        </div>
+      </div>
+      <div class="od__grid">
+        <div class="review-section">
+          <!-- Show review form or submitted review -->
+          <div class="review-card ai" style="transition-delay:160ms">
+            <template v-if="!order?.review">
+              <h3>Beri tahu kami pengalaman Anda</h3>
+              <label class="review-label">Tingkat Kepuasan</label>
+              <div class="stars">
+                <svg v-for="s in 5" :key="s" width="28" height="28" viewBox="0 0 24 24" :fill="s <= rating ? '#3B5BDB' : 'none'" :stroke="s <= rating ? '#3B5BDB' : '#D1D5DB'" stroke-width="2" @click="rating = s" style="cursor:pointer"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <label class="review-label">Bagikan pengalaman Anda</label>
+              <textarea v-model="reviewText" placeholder="Jelaskan kualitas layanan, komunikasi, dan hasil pengerjaan..." rows="4"></textarea>
+              <div class="review-actions">
+                <button class="btn-submit-review" @click="submitReview">Kirim Ulasan</button>
+                <button class="btn-skip" @click="goBack">Kembali</button>
+              </div>
+            </template>
+            <template v-else>
+              <h3>Ulasan Anda</h3>
+              <div class="stars" style="margin-bottom: 0.5rem;">
+                <svg v-for="s in 5" :key="s" width="22" height="22" viewBox="0 0 24 24" :fill="s <= rating ? '#3B5BDB' : 'none'" :stroke="s <= rating ? '#3B5BDB' : '#D1D5DB'" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <p class="text-sm text-gray-700 italic">"{{ reviewText || 'Tidak ada komentar ulasan.' }}"</p>
+            </template>
+          </div>
+
+          <!-- Files Card (Deliverables) in Completed View -->
+          <div v-if="order?.deliverables?.length" class="files-card ai" style="transition-delay:200ms">
+            <h3>File Hasil Kerja</h3>
+            <div v-for="f in order?.deliverables" :key="f.id" class="file-row">
+              <div class="file-row__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B5BDB" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="file-row__info">
+                <strong>{{ getFilename(f.fileUrl) }}</strong>
+                <span>Format: {{ getFileExtension(f.fileUrl) }} &nbsp; Pesan: {{ f.message || '-' }}</span>
+              </div>
+              <a :href="f.fileUrl" target="_blank" download class="file-row__dl" aria-label="Download">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </a>
+            </div>
+          </div>
+
+          <div class="tip-card ai" style="transition-delay:240ms">
+            <h3>🎉 Beri Tip</h3>
+            <p>Berikan apresiasi atas layanan yang luar biasa dengan menambahkan tip untuk tim vendor.</p>
+            <div class="tip-options">
+              <button v-for="t in tipOptions" :key="t" class="tip-btn" :class="{ 'tip-btn--active': selectedTip === t }" @click="selectedTip = t">{{ t }}</button>
+            </div>
+          </div>
+        </div>
+        <div class="summary-section">
+          <div class="summary-card ai" style="transition-delay:160ms">
+            <div class="summary-card__header">Ringkasan Pesanan</div>
+            <div class="summary-card__body">
+              <h4>{{ order?.gig?.title }}</h4>
+              <div class="summary-row muted">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Vendor: {{ order?.merchant?.shopName }}
+              </div>
+              <div class="summary-row"><span>Subtotal Jasa</span><span>{{ formatPrice(Number(order?.totalAmount) - Number(order?.adminFee || 0)) }}</span></div>
+              <div class="summary-row"><span>Biaya Layanan</span><span>{{ formatPrice(order?.adminFee) }}</span></div>
+              <div class="summary-row total"><span>Total Harga</span><strong>{{ formatPrice(order?.totalAmount) }}</strong></div>
+              <button class="btn-pay" disabled style="background-color: #6B7280; cursor: not-allowed;">Pesanan Selesai</button>
+            </div>
+          </div>
+          <div class="invoice-card ai" style="transition-delay:240ms; cursor: pointer" @click="downloadInvoice">
+            <div class="invoice-card__inner">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div><strong>Unduh Invoice</strong><small>PDF Resmi</small></div>
+            </div>
+            <button aria-label="Download invoice">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
   </template>
 </div>
 </div>

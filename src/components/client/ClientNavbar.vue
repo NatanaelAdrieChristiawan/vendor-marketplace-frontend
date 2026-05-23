@@ -68,7 +68,7 @@ onUnmounted(() => {
           <router-link to="/pesanan" class="navbar__link">Pesanan Saya</router-link>
         </template>
         <template v-else>
-          <router-link to="/menjadi-vendor" class="navbar__link">Menjadi Vendor</router-link>
+          <router-link to="/daftar" class="navbar__link">Menjadi Vendor</router-link>
         </template>
       </nav>
 
@@ -143,7 +143,7 @@ onUnmounted(() => {
             </div>
           </template>
           <template v-else>
-            <router-link to="/menjadi-vendor" class="navbar__mobile-link" @click="closeMobileMenu">Menjadi Vendor</router-link>
+            <router-link to="/daftar" class="navbar__mobile-link" @click="closeMobileMenu">Menjadi Vendor</router-link>
             <div class="navbar__mobile-actions">
               <router-link to="/daftar" class="navbar__mobile-btn navbar__mobile-btn--outline" @click="closeMobileMenu">Daftar</router-link>
               <router-link to="/daftar" class="navbar__mobile-btn navbar__mobile-btn--primary" @click="closeMobileMenu">Masuk</router-link>

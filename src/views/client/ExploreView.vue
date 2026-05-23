@@ -1,32 +1,45 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { useCategories } from '../../composables/useCategories'
+import { useGigsList } from '../../composables/useGigs'
 
-const selectedCategory = ref('Creative Studio')
+const route = useRoute()
+const selectedCategoryId = ref<number | null>(route.query.categoryId ? Number(route.query.categoryId) : null)
 const sortBy = ref('popular')
 const showSortDropdown = ref(false)
-const priceMin = ref('100000')
-const priceMax = ref('200000')
+const priceMin = ref('0')
+const priceMax = ref('5000000')
 const selectedRatings = ref<number[]>([])
+const searchQuery = ref(route.query.q ? String(route.query.q) : '')
 
-const categories = [
-  'Creative Studio',
-  'Event Essentials',
-  'Digital Marketing',
-  'Tech & Dev',
-  'Audio & Music',
-]
+const { data: categoriesData } = useCategories()
+const { data: gigList, isLoading } = useGigsList()
 
-const products = [
-  { id: 1, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 2, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 3, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 4, title: 'Desain Produk Untuk Bisnis', vendor: 'Sarah Design', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 5, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-  { id: 6, title: 'Fotografi Produk E-commerece', vendor: 'Marco V. Studio', avatar: '', rating: 4.9, price: 1200000, image: '/images/products/cinema-event.png', category: 'Creative Studio' },
-]
+watch(() => route.query.categoryId, (newVal) => {
+  if (newVal) selectedCategoryId.value = Number(newVal)
+})
+
+watch(() => route.query.q, (newVal) => {
+  searchQuery.value = newVal ? String(newVal) : ''
+})
 
 function formatPrice(val: number) {
   return 'Rp ' + val.toLocaleString('id-ID')
+}
+
+function selectCategory(id: number | null) {
+  if (selectedCategoryId.value === id) {
+    selectedCategoryId.value = null
+  } else {
+    selectedCategoryId.value = id
+  }
+}
+
+function parseNumericPrice(val: string | number) {
+  if (typeof val === 'number') return val
+  const cleaned = String(val).replace(/[^0-9]/g, '')
+  return parseFloat(cleaned) || 0
 }
 
 function toggleRating(star: number) {
@@ -40,6 +53,10 @@ function selectSort(value: string) {
   showSortDropdown.value = false
 }
 
+const closeSortDropdown = () => {
+  showSortDropdown.value = false
+}
+
 const sortLabel: Record<string, string> = {
   popular: 'Populer',
   newest: 'Terbaru',
@@ -47,11 +64,104 @@ const sortLabel: Record<string, string> = {
   rating: 'Rating Tertinggi',
 }
 
+let observer: IntersectionObserver | null = null
+
 onMounted(() => {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target) } })
+  window.addEventListener('click', closeSortDropdown)
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible')
+        observer?.unobserve(e.target)
+      }
+    })
   }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' })
-  document.querySelectorAll('.anim-in').forEach((el) => observer.observe(el))
+  document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', closeSortDropdown)
+})
+
+watch(isLoading, (loading) => {
+  if (!loading) {
+    nextTick(() => {
+      document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+    })
+  }
+})
+
+const products = computed(() => {
+  if (!gigList.value) return []
+  
+  let list = gigList.value.map((g: any) => {
+    let title = g.title
+    let price = parseFloat(g.price)
+    let image = g.mediaUrls
+    
+    try {
+      if (g.description && (g.description.startsWith('{') || g.description.startsWith('['))) {
+        const parsed = JSON.parse(g.description)
+        if (parsed.tiers?.standard?.price) {
+          price = parseFloat(String(parsed.tiers.standard.price).replace(/[^0-9]/g, '')) || price
+        }
+      }
+    } catch (e) {
+    }
+
+    return {
+      id: g.id,
+      title: title,
+      vendor: g.merchant?.shopName || 'Vendor',
+      avatar: g.merchant?.logoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(g.merchant?.shopName || 'Vendor')}&background=random`,
+      rating: 5.0,
+      price: price,
+      image: image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+      categoryId: g.categoryId,
+      categoryName: g.category?.name || 'Lainnya',
+      createdAt: g.createdAt
+    }
+  })
+
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter((p: any) =>
+      p.title.toLowerCase().includes(q) ||
+      p.categoryName.toLowerCase().includes(q) ||
+      p.vendor.toLowerCase().includes(q)
+    )
+  }
+
+  if (selectedCategoryId.value !== null) {
+    list = list.filter((p: any) => p.categoryId === selectedCategoryId.value)
+  }
+
+  const minVal = parseNumericPrice(priceMin.value)
+  const maxVal = priceMax.value === '' ? Infinity : parseNumericPrice(priceMax.value)
+  list = list.filter((p: any) => p.price >= minVal && p.price <= maxVal)
+
+  if (selectedRatings.value.length > 0) {
+    const minRating = Math.min(...selectedRatings.value)
+    list = list.filter((p: any) => p.rating >= minRating)
+  }
+
+  if (sortBy.value === 'popular') {
+    list.sort((a: any, b: any) => b.rating - a.rating)
+  } else if (sortBy.value === 'newest') {
+    list.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  } else if (sortBy.value === 'cheapest') {
+    list.sort((a: any, b: any) => a.price - b.price)
+  } else if (sortBy.value === 'rating') {
+    list.sort((a: any, b: any) => b.rating - a.rating)
+  }
+
+  return list
+})
+
+watch(products, () => {
+  nextTick(() => {
+    document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+  })
 })
 </script>
 
@@ -85,17 +195,27 @@ onMounted(() => {
             <span>Filter</span>
           </div>
 
-          <!-- Category Filter -->
+          <div class="filter-group">
+            <h3 class="filter-group__title">Cari Jasa</h3>
+            <div class="filter-search-box">
+              <input type="text" v-model="searchQuery" placeholder="Cari kata kunci..." class="filter-search-input" />
+            </div>
+          </div>
+
           <div class="filter-group">
             <h3 class="filter-group__title">Kategori Jasa</h3>
-            <label v-for="cat in categories" :key="cat" class="filter-check">
-              <input type="checkbox" :value="cat" :checked="selectedCategory === cat" @change="selectedCategory = cat" />
+            <label class="filter-check">
+              <input type="checkbox" :checked="selectedCategoryId === null" @change="selectCategory(null)" />
               <span class="filter-check__mark"></span>
-              <span class="filter-check__label">{{ cat }}</span>
+              <span class="filter-check__label">Semua Kategori</span>
+            </label>
+            <label v-for="cat in categoriesData" :key="cat.id" class="filter-check">
+              <input type="checkbox" :checked="selectedCategoryId === cat.id" @change="selectCategory(cat.id)" />
+              <span class="filter-check__mark"></span>
+              <span class="filter-check__label">{{ cat.name }}</span>
             </label>
           </div>
 
-          <!-- Price Filter -->
           <div class="filter-group">
             <h3 class="filter-group__title">Range Harga</h3>
             <input type="range" min="0" max="5000000" step="50000" v-model="priceMax" class="filter-range" />
@@ -111,11 +231,10 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Rating Filter -->
           <div class="filter-group">
             <h3 class="filter-group__title">Rating Minimum</h3>
             <label v-for="star in [5, 4, 3, 2]" :key="star" class="filter-check">
-              <input type="checkbox" :value="star" @change="toggleRating(star)" />
+              <input type="checkbox" :checked="selectedRatings.includes(star)" @change="toggleRating(star)" />
               <span class="filter-check__mark"></span>
               <span class="filter-check__stars">
                 <svg v-for="s in 5" :key="s" width="14" height="14" viewBox="0 0 24 24" :fill="s <= star ? '#F59E0B' : '#D1D5DB'" :stroke="s <= star ? '#F59E0B' : '#D1D5DB'" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -127,13 +246,27 @@ onMounted(() => {
 
         <!-- Product Grid -->
         <div class="products">
-          <div class="products__grid">
+          <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 text-gray-500 w-full">
+            <svg class="animate-spin h-8 w-8 text-blue-500 mb-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-sm font-semibold">Memuat daftar jasa...</p>
+          </div>
+
+          <div v-else-if="products.length === 0" class="flex flex-col items-center justify-center py-20 text-gray-500 w-full text-center">
+            <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <p class="text-base font-bold text-gray-700 mb-1">Tidak ada jasa ditemukan</p>
+            <p class="text-xs text-gray-400">Coba ubah filter atau rentang harga pencarian Anda</p>
+          </div>
+
+          <div v-else class="products__grid">
             <router-link
               v-for="(p, idx) in products"
               :key="p.id"
               :to="`/jelajahi/${p.id}`"
               class="product-card anim-in"
-              :style="{ transitionDelay: `${(idx % 3) * 80 + 100}ms` }"
+              :style="{ transitionDelay: `${(Number(idx) % 3) * 80 + 100}ms` }"
             >
               <div class="product-card__img-wrapper">
                 <img :src="p.image" :alt="p.title" class="product-card__img" loading="lazy" />
@@ -144,7 +277,7 @@ onMounted(() => {
               </div>
               <div class="product-card__body">
                 <div class="product-card__vendor">
-                  <div class="product-card__avatar"></div>
+                  <div class="product-card__avatar" :style="`background-image: url(${p.avatar}); background-size: cover; background-position: center;`"></div>
                   <div>
                     <h3 class="product-card__title">{{ p.title }}</h3>
                     <span class="product-card__vendor-name">{{ p.vendor }}</span>
@@ -266,5 +399,26 @@ onMounted(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .anim-in, .product-card, .product-card__img { transition: none; }
+}
+
+.filter-search-box {
+  display: flex;
+  align-items: center;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 0.375rem 0.75rem;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+.filter-search-box:focus-within {
+  border-color: #3B5BDB;
+}
+.filter-search-input {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 0.8125rem;
+  color: #374151;
+  background: transparent;
 }
 </style>

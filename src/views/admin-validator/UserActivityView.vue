@@ -1,30 +1,25 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useUserDetail, useUserChatLogs } from '../../composables/useUsers'
 
 const router = useRouter()
 const route = useRoute()
-
-// Mock data (in real app, fetch based on route.params.id)
-const user = ref({
-  id: route.params.id || 'USR-99210',
-  name: 'Alaa Mohamed',
-  status: 'Active',
-  avatar: 'https://i.pravatar.cc/150?img=5'
-})
+const userId = route.params.id as string
 
 const activeTab = ref('log-chat')
 
-const chatLogs = ref([
-  { id: 1, message: '"Isi pesan yg dilaporin"', time: '10:30 AM', avatar: user.value.avatar },
-  { id: 2, message: '"Isi pesan yg dilaporin"', time: '10:30 AM', avatar: user.value.avatar },
-  { id: 3, message: '"Isi pesan yg dilaporin"', time: '10:30 AM', avatar: user.value.avatar },
-])
+const userQuery = useUserDetail(userId)
+const chatLogsQuery = useUserChatLogs(userId)
+
+const user = computed(() => userQuery.data.value)
+const chatLogs = computed(() => chatLogsQuery.data.value || [])
 
 function goBack() {
   router.push('/admin-validator/user-moderation')
 }
 </script>
+
 
 <template>
   <div class="space-y-6 animate-fade-in w-full pb-10 max-w-[900px] mx-auto">
@@ -36,24 +31,25 @@ function goBack() {
     </div>
 
     <!-- User Profile Card -->
-    <div class="bg-white rounded-[20px] shadow-sm border border-gray-100 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
-      <div class="flex items-center gap-5">
-        <div class="w-16 h-16 rounded-full overflow-hidden border-4 border-orange-50 bg-white">
-          <img :src="user.avatar" alt="Avatar" class="w-full h-full object-cover" />
-        </div>
-        <div>
-          <div class="flex items-center gap-3 mb-1">
-            <h2 class="text-xl font-extrabold text-gray-900">{{ user.name }}</h2>
-            <span class="px-3 py-1 rounded-full border border-gray-200 text-xs font-bold text-gray-600 bg-white shadow-sm">{{ user.id }}</span>
+    <div class="bg-white rounded-[20px] shadow-sm border border-gray-150 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+      <div v-if="!user" class="text-sm text-gray-400">Memuat data pengguna...</div>
+      <template v-else>
+        <div class="flex items-center gap-5">
+          <div class="w-16 h-16 rounded-full overflow-hidden border-4 border-orange-50 bg-white">
+            <img :src="user.avatar || `https://i.pravatar.cc/150?u=${user.id}`" alt="Avatar" class="w-full h-full object-cover" />
+          </div>
+          <div>
+            <div class="flex items-center gap-3 mb-1">
+              <h2 class="text-xl font-extrabold text-gray-900">{{ user.fullName || user.name }}</h2>
+              <span class="px-3 py-1 rounded-full border border-gray-200 text-xs font-bold text-gray-600 bg-white shadow-sm">#{{ user.id }}</span>
+            </div>
           </div>
         </div>
-      </div>
-      
-      <!-- Status Badge -->
-      <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs font-bold shadow-sm">
-        <span class="w-2 h-2 rounded-full" :class="user.status === 'Active' ? 'bg-green-500' : 'bg-orange-500'"></span>
-        <span class="text-gray-700">{{ user.status }}</span>
-      </div>
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs font-bold shadow-sm">
+          <span class="w-2 h-2 rounded-full" :class="user.status === 'ACTIVE' || user.status === 'Active' ? 'bg-green-500' : 'bg-orange-500'"></span>
+          <span class="text-gray-700">{{ user.status }}</span>
+        </div>
+      </template>
     </div>
 
     <!-- Tabs -->
@@ -79,12 +75,13 @@ function goBack() {
     <!-- Tab Content: Log Chat -->
     <div v-if="activeTab === 'log-chat'" class="space-y-4 pt-2">
       <div v-for="log in chatLogs" :key="log.id" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4 hover:shadow-md transition-shadow cursor-default">
-        <img :src="log.avatar" alt="Avatar" class="w-10 h-10 rounded-full object-cover border border-gray-100 shrink-0" />
+        <img :src="log.senderAvatar || user?.avatar || `https://i.pravatar.cc/150?u=${userId}`" alt="Avatar" class="w-10 h-10 rounded-full object-cover border border-gray-100 shrink-0" />
         <div class="flex-1 pt-2">
-          <p class="text-gray-800 font-bold text-[15px]">{{ log.message }}</p>
+          <div class="text-xs font-bold text-gray-400 mb-1">{{ log.senderName }}</div>
+          <p class="text-gray-800 font-bold text-[15px]">{{ log.message || log.content }}</p>
         </div>
         <div class="text-sm font-medium text-gray-400 pt-2 shrink-0">
-          {{ log.time }}
+          {{ log.time || (log.createdAt ? new Date(log.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-') }}
         </div>
       </div>
     </div>

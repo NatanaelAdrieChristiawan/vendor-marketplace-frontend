@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useAuth } from '../../composables/useAuth'
 
-const { loginMutation } = useAuth()
+const { loginMutation, logout } = useAuth()
 
 const email = ref('')
 const password = ref('')
@@ -21,7 +21,6 @@ function handleLogin() {
       if (user) {
         const role = user.role.toUpperCase()
         if (!role.includes('ADMIN') && role !== 'SUPER_ADMIN') {
-          const { logout } = useAuth()
           logout()
           loginError.value = true
         }

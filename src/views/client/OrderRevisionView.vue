@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuth } from '../../composables/useAuth'
+import api from '../../api/axios'
+import { useQueryClient } from '@tanstack/vue-query'
 
 const route = useRoute()
 const router = useRouter()
-const orderId = route.params.id
+const orderId = route.params.id as string
+const { uploadFile } = useAuth()
+const queryClient = useQueryClient()
 
 const revisionText = ref('')
 const isDragging = ref(false)
+const isUploading = ref(false)
+const rawFiles = ref<File[]>([])
 const uploadedFiles = ref<{ name: string; size: string }[]>([])
 
 function goBack() { router.push(`/pesanan/${orderId}`) }
@@ -18,6 +25,7 @@ function handleDrop(e: DragEvent) {
   e.preventDefault(); isDragging.value = false
   if (e.dataTransfer?.files) {
     Array.from(e.dataTransfer.files).forEach(f => {
+      rawFiles.value.push(f)
       uploadedFiles.value.push({ name: f.name, size: (f.size / 1024 / 1024).toFixed(1) + ' MB' })
     })
   }
@@ -29,13 +37,45 @@ function triggerUpload() {
   input.onchange = (e: Event) => {
     const files = (e.target as HTMLInputElement).files
     if (files) Array.from(files).forEach(f => {
+      rawFiles.value.push(f)
       uploadedFiles.value.push({ name: f.name, size: (f.size / 1024 / 1024).toFixed(1) + ' MB' })
     })
   }
   input.click()
 }
-function removeFile(idx: number) { uploadedFiles.value.splice(idx, 1) }
-function submitRevision() { router.push(`/pesanan/${orderId}`) }
+function removeFile(idx: number) {
+  uploadedFiles.value.splice(idx, 1)
+  rawFiles.value.splice(idx, 1)
+}
+
+async function submitRevision() {
+  if (!revisionText.value.trim()) {
+    alert('Umpan balik revisi tidak boleh kosong.')
+    return
+  }
+  
+  isUploading.value = true
+  try {
+    const fileUrls: string[] = []
+    for (const file of rawFiles.value) {
+      const uploadRes = await uploadFile(file, 'merchant-assets')
+      const fileUrl = uploadRes.url || uploadRes.data?.url
+      if (fileUrl) fileUrls.push(fileUrl)
+    }
+    await api.post(`/orders/${orderId}/request-revision`, {
+      message: revisionText.value,
+      attachments: fileUrls
+    })
+    queryClient.invalidateQueries({ queryKey: ['order', orderId] })
+    queryClient.invalidateQueries({ queryKey: ['revisions', orderId] })
+    alert('Permintaan revisi berhasil dikirim!')
+    router.push(`/pesanan/${orderId}`)
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Gagal mengirim permintaan revisi. Silakan coba lagi.')
+  } finally {
+    isUploading.value = false
+  }
+}
 
 onMounted(() => {
   const obs = new IntersectionObserver((entries) => {
@@ -82,7 +122,9 @@ onMounted(() => {
   </div>
 
   <div class="rev__submit ai" style="transition-delay:320ms">
-    <button class="btn-send-revision" @click="submitRevision">Kirim Permintaan Revisi</button>
+    <button class="btn-send-revision" :disabled="isUploading" @click="submitRevision">
+      {{ isUploading ? 'Mengirim...' : 'Kirim Permintaan Revisi' }}
+    </button>
   </div>
 </div>
 </div>

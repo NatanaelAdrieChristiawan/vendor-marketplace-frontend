@@ -1,42 +1,25 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useCategories } from '../../composables/useCategories'
+import { useMerchantLeaderboard } from '../../composables/useMerchants'
 
+const router = useRouter()
 const heroSearch = ref('')
 
-const categories = [
-  { name: 'Creative Studio', icon: 'palette' },
-  { name: 'Event Essentials', icon: 'camera' },
-  { name: 'Tech & Dev', icon: 'code' },
-  { name: 'Digital Marketing', icon: 'megaphone' },
-  { name: 'Legal & Finance', icon: 'briefcase' },
-  { name: 'Audio & Music', icon: 'music' },
-  { name: 'Business Support', icon: 'chart' },
-  { name: 'Consulting', icon: 'users' },
-]
+const { data: categoriesData } = useCategories()
+const { data: merchantsData } = useMerchantLeaderboard()
 
-const vendors = [
-  {
-    name: 'Creative Studio Tel-U',
-    image: '/images/vendors/creative-art.png',
-    rating: 4.9,
-    reviews: 127,
-    price: 'Rp 50.000',
-  },
-  {
-    name: 'VideoMakers ITB',
-    image: '/images/vendors/videomakers.png',
-    rating: 4.8,
-    reviews: 89,
-    price: 'Rp 50.000',
-  },
-  {
-    name: 'EventPro UI',
-    image: '/images/vendors/eventpro.png',
-    rating: 5.0,
-    reviews: 45,
-    price: 'Rp 50.000',
-  },
-]
+function handleSearch() {
+  if (heroSearch.value.trim()) {
+    router.push({
+      path: '/jelajahi',
+      query: { q: heroSearch.value.trim() }
+    })
+  } else {
+    router.push('/jelajahi')
+  }
+}
 
 const trustFeatures = [
   {
@@ -91,8 +74,8 @@ onMounted(() => {
           </p>
           <div class="hero__search">
             <svg class="hero__search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input v-model="heroSearch" type="search" placeholder="Cari desain, web..." class="hero__search-input" aria-label="Cari layanan" />
-            <button class="hero__search-btn" aria-label="Cari sekarang">Cari Sekarang</button>
+            <input v-model="heroSearch" type="search" placeholder="Cari desain, web..." class="hero__search-input" aria-label="Cari layanan" @keyup.enter="handleSearch" />
+            <button class="hero__search-btn" @click="handleSearch" aria-label="Cari sekarang">Cari Sekarang</button>
           </div>
         </div>
         <div class="hero__visual animate-on-scroll slide-left" style="transition-delay: 200ms">
@@ -114,27 +97,12 @@ onMounted(() => {
         <h2 class="section-title animate-on-scroll slide-up">Jelajahi Berdasarkan Kategori</h2>
         <p class="section-subtitle animate-on-scroll slide-up" style="transition-delay: 100ms">Temukan spesialisasi yang tepat sesuai kebutuhan proyek Anda.</p>
         <div class="categories__grid">
-          <a v-for="(cat, idx) in categories" :key="cat.name" href="#" class="category-card animate-on-scroll slide-up" :style="{ transitionDelay: `${(idx % 4) * 50 + 150}ms` }" :aria-label="cat.name">
+          <router-link v-for="(cat, idx) in categoriesData" :key="cat.id" :to="`/jelajahi?categoryId=${cat.id}`" class="category-card animate-on-scroll slide-up" :style="{ transitionDelay: `${(Number(idx) % 4) * 50 + 150}ms` }" :aria-label="cat.name">
             <div class="category-card__icon">
-              <!-- Palette -->
-              <svg v-if="cat.icon === 'palette'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-1 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-5.52-4.48-9.5-10-9.5z"/><circle cx="7.5" cy="11.5" r="1.5"/><circle cx="10.5" cy="7.5" r="1.5"/><circle cx="14.5" cy="7.5" r="1.5"/><circle cx="17.5" cy="11.5" r="1.5"/></svg>
-              <!-- Camera -->
-              <svg v-if="cat.icon === 'camera'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              <!-- Code -->
-              <svg v-if="cat.icon === 'code'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-              <!-- Megaphone -->
-              <svg v-if="cat.icon === 'megaphone'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 13V11z"/><path d="M11.6 16.8a3 3 0 11-5.8-1.6"/></svg>
-              <!-- Briefcase -->
-              <svg v-if="cat.icon === 'briefcase'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
-              <!-- Music -->
-              <svg v-if="cat.icon === 'music'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-              <!-- Chart -->
-              <svg v-if="cat.icon === 'chart'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-              <!-- Users -->
-              <svg v-if="cat.icon === 'users'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-1 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-5.52-4.48-9.5-10-9.5z"/><circle cx="7.5" cy="11.5" r="1.5"/><circle cx="10.5" cy="7.5" r="1.5"/><circle cx="14.5" cy="7.5" r="1.5"/><circle cx="17.5" cy="11.5" r="1.5"/></svg>
             </div>
             <span class="category-card__name">{{ cat.name }}</span>
-          </a>
+          </router-link>
         </div>
       </div>
     </section>
@@ -155,30 +123,30 @@ onMounted(() => {
       <div class="vendors__inner">
         <div class="vendors__header animate-on-scroll slide-up">
           <h2 class="section-title">Vendor Terpilih Minggu ini</h2>
-          <a href="#" class="vendors__see-all">Lihat Semua
+          <router-link to="/jelajahi" class="vendors__see-all">Lihat Semua
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-          </a>
+          </router-link>
         </div>
         <div class="vendors__grid">
-          <a v-for="(v, idx) in vendors" :key="v.name" href="#" class="vendor-card animate-on-scroll slide-up" :style="{ transitionDelay: `${idx * 100 + 150}ms` }">
+          <router-link v-for="(v, idx) in merchantsData" :key="v.id" :to="`/vendor/${v.id}`" class="vendor-card animate-on-scroll slide-up" :style="{ transitionDelay: `${Number(idx) * 100 + 150}ms` }">
             <div class="vendor-card__img-wrapper">
-              <img :src="v.image" :alt="v.name" class="vendor-card__img" loading="lazy" />
+              <img :src="v.user?.avatarUrl || '/images/default-avatar.png'" :alt="v.storeName" class="vendor-card__img" loading="lazy" />
             </div>
             <div class="vendor-card__body">
-              <h3 class="vendor-card__name">{{ v.name }}</h3>
+              <h3 class="vendor-card__name">{{ v.storeName }}</h3>
               <div class="vendor-card__meta">
                 <span class="vendor-card__rating">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="#F59E0B" stroke="#F59E0B" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                  {{ v.rating }}
+                  {{ (v.avgRating || 0).toFixed(1) }}
                 </span>
-                <span class="vendor-card__reviews">({{ v.reviews }} reviews)</span>
+                <span class="vendor-card__reviews">({{ v.totalReviews || 0 }} reviews)</span>
               </div>
               <div class="vendor-card__price">
-                <span class="vendor-card__price-label">Starting from</span>
-                <span class="vendor-card__price-value">{{ v.price }}</span>
+                <span class="vendor-card__price-label" v-if="v.gigs?.[0]">Starting from</span>
+                <span class="vendor-card__price-value" v-if="v.gigs?.[0]">Rp {{ v.gigs[0].price.toLocaleString() }}</span>
               </div>
             </div>
-          </a>
+          </router-link>
         </div>
       </div>
     </section>
@@ -187,7 +155,7 @@ onMounted(() => {
     <section class="trust">
       <div class="trust__inner">
         <div class="trust__grid">
-          <div v-for="(f, idx) in trustFeatures" :key="f.title" class="trust-card animate-on-scroll slide-up" :style="{ transitionDelay: `${idx * 150 + 100}ms` }">
+          <div v-for="(f, idx) in trustFeatures" :key="f.title" class="trust-card animate-on-scroll slide-up" :style="{ transitionDelay: `${Number(idx) * 150 + 100}ms` }">
             <div class="trust-card__icon">
               <svg v-if="f.icon === 'shield'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               <svg v-if="f.icon === 'check'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>

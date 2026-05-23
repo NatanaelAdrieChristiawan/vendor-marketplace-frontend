@@ -4,8 +4,6 @@ import api from '../api/axios'
 export function useAdmin() {
   const queryClient = useQueryClient()
 
-  // --- MERCHANTS ---
-  
   const pendingMerchantsQuery = useQuery({
     queryKey: ['admin', 'merchants', 'pending'],
     queryFn: async () => {
@@ -34,8 +32,6 @@ export function useAdmin() {
     }
   })
 
-  // --- GIGS ---
-
   const pendingGigsQuery = useQuery({
     queryKey: ['admin', 'gigs', 'pending'],
     queryFn: async () => {
@@ -53,8 +49,6 @@ export function useAdmin() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'gigs', 'pending'] })
     }
   })
-
-  // --- DISPUTES ---
 
   const pendingDisputesQuery = useQuery({
     queryKey: ['admin', 'disputes', 'pending'],
@@ -74,6 +68,36 @@ export function useAdmin() {
     }
   })
 
+  const submitVerdictMutation = useMutation({
+    mutationFn: async ({ id, decision }: { id: number, decision: 'APPROVE_REFUND' | 'REJECT_COMPLAINT' }) => {
+      const response = await api.patch(`/admin/validator/disputes/${id}/submit-verdict`, { decision })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'disputes', 'pending'] })
+    }
+  })
+
+  const confirmVerdictMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await api.patch(`/admin/validator/disputes/${id}/confirm-verdict`)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'disputes', 'pending'] })
+    }
+  })
+
+  const executiveDecisionMutation = useMutation({
+    mutationFn: async ({ id, decision }: { id: number, decision: 'FORCE_REFUND' | 'FORCE_RELEASE' }) => {
+      const response = await api.patch(`/admin/validator/disputes/${id}/executive-decision`, { decision })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'disputes', 'pending'] })
+    }
+  })
+
   return {
     pendingMerchantsQuery,
     verifyMerchantMutation,
@@ -81,6 +105,10 @@ export function useAdmin() {
     pendingGigsQuery,
     verifyGigMutation,
     pendingDisputesQuery,
-    resolveDisputeMutation
+    resolveDisputeMutation,
+    submitVerdictMutation,
+    confirmVerdictMutation,
+    executiveDecisionMutation
   }
 }
+

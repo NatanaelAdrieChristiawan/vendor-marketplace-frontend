@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useMyGigs } from '../../composables/useGigs'
+import api from '../../api/axios'
 import FileUpload from '../../components/ui/FileUpload.vue'
 import Button from '../../components/ui/Button.vue'
 import Input from '../../components/ui/Input.vue'
 import Toast from '../../components/ui/Toast.vue'
 
 const router = useRouter()
-const title = ref('Jasa Desain Keren Banget')
-const description = ref('Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.')
+const route = useRoute()
+const gigId = route.params.id as string
+
+const { data: myGigs, isLoading } = useMyGigs()
+
+const gig = computed(() => {
+  if (!myGigs.value) return null
+  return myGigs.value.find((g: any) => String(g.id) === String(gigId))
+})
+
+const title = ref('')
+const description = ref('')
 const mediaFile = ref<File | null>(null)
 const showToast = ref(false)
 const toastData = reactive<{type: 'info' | 'success' | 'error', title: string, subtitle: string}>({
@@ -17,30 +29,92 @@ const toastData = reactive<{type: 'info' | 'success' | 'error', title: string, s
   subtitle: ''
 })
 
-const packages = ref([
-  { id: 1, name: 'Basic', nominal: 'Rp. 150.000,00', color: 'bg-gray-500' },
-  { id: 2, name: 'Premium', nominal: 'Rp. 250.000,00', color: 'bg-emerald-500' },
-  { id: 3, name: 'Platinum', nominal: 'Rp. 400.000,00', color: 'bg-[#2F4DC4]' }
-])
+const tiers = reactive({
+  basic: { price: '', features: '' },
+  standard: { price: '', features: '' },
+  premium: { price: '', features: '' }
+})
 
-function handlePublish() {
-  toastData.type = 'success'
-  toastData.title = "Gig's kamu di Aprove!"
-  toastData.subtitle = 'ACTIVE'
-  showToast.value = true
-  
-  setTimeout(() => {
-    router.push('/vendor/catalog')
-  }, 2000)
+watch(gig, (newGig) => {
+  if (newGig) {
+    title.value = newGig.title
+    try {
+      const parsed = JSON.parse(newGig.description)
+      description.value = parsed.text || ''
+      if (parsed.tiers) {
+        tiers.basic.price = parsed.tiers.basic?.price || ''
+        tiers.basic.features = parsed.tiers.basic?.features || ''
+        tiers.standard.price = parsed.tiers.standard?.price || ''
+        tiers.standard.features = parsed.tiers.standard?.features || ''
+        tiers.premium.price = parsed.tiers.premium?.price || ''
+        tiers.premium.features = parsed.tiers.premium?.features || ''
+      }
+    } catch (e) {
+      description.value = newGig.description
+      tiers.basic.price = String(newGig.price)
+    }
+  }
+}, { immediate: true })
+
+async function handlePublish() {
+  try {
+    const payload = {
+      title: title.value,
+      description: JSON.stringify({
+        text: description.value,
+        tiers: {
+          basic: { price: tiers.basic.price, features: tiers.basic.features },
+          standard: { price: tiers.standard.price, features: tiers.standard.features },
+          premium: { price: tiers.premium.price, features: tiers.premium.features }
+        }
+      }),
+      price: parseFloat(String(tiers.basic.price).replace(/[^0-9]/g, '')) || 0
+    }
+
+    const formData = new FormData()
+    formData.append('title', payload.title)
+    formData.append('description', payload.description)
+    formData.append('price', String(payload.price))
+    if (mediaFile.value) {
+      formData.append('media', mediaFile.value)
+    }
+
+    // Using api.patch with multipart/form-data for media upload
+    await api.patch(`/gigs/${gigId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+
+    toastData.type = 'success'
+    toastData.title = "Layanan Diperbarui!"
+    toastData.subtitle = 'ACTIVE'
+    showToast.value = true
+    
+    setTimeout(() => {
+      router.push('/vendor/catalog')
+    }, 2000)
+  } catch (err: any) {
+    console.error('Failed to update gig', err)
+    toastData.type = 'error'
+    toastData.title = "Gagal memperbarui"
+    toastData.subtitle = err.response?.data?.message || err.message
+    showToast.value = true
+  }
 }
 
 function handleBoost() {
-  router.push('/vendor/catalog/promote/1')
+  router.push(`/vendor/catalog/promote/${gigId}`)
 }
 </script>
 
 <template>
   <div class="p-8 max-w-4xl relative">
+    <div v-if="isLoading" class="flex items-center justify-center min-h-[400px]">
+       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-navy"></div>
+    </div>
+    
+    <template v-else-if="gig">
     <div v-if="showToast" class="fixed top-8 right-8 z-50">
       <Toast :type="toastData.type" :title="toastData.title" :subtitle="toastData.subtitle" />
     </div>
@@ -69,27 +143,76 @@ function handleBoost() {
       </div>
 
       <div class="flex flex-col gap-1.5">
-        <label class="text-sm font-medium text-gray-700">Harga Paket</label>
-        <div class="flex flex-wrap gap-4 items-center">
-          <div 
-            v-for="pkg in packages" 
-            :key="pkg.id" 
-            class="flex items-center gap-3 p-3 border border-brand-navy rounded-xl min-w-[200px]"
-          >
-            <div :class="[pkg.color, 'w-12 h-12 rounded-lg text-white flex items-center justify-center shrink-0']">
-              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" /><path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+        <label class="text-sm font-medium text-gray-700 font-bold mb-2">Penentuan Harga & Paket</label>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Basic Tier -->
+          <div class="p-6 rounded-2xl border-2 border-gray-100 bg-white space-y-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              </div>
+              <h3 class="font-bold text-gray-900">Basic</h3>
             </div>
-            <div class="flex flex-col gap-1 w-full">
-              <input type="text" v-model="pkg.name" placeholder="Nama Paket" class="text-sm font-medium text-black placeholder:text-gray-300 outline-none border-b border-gray-200 pb-0.5" />
-              <input type="text" v-model="pkg.nominal" placeholder="Nominal" class="text-xs text-black placeholder:text-gray-300 outline-none border-b border-gray-200 pb-0.5" />
+            <div class="space-y-3">
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Harga</label>
+                <div class="relative mt-1">
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
+                  <input v-model="tiers.basic.price" type="number" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fitur (Pisahkan dengan koma)</label>
+                <textarea v-model="tiers.basic.features" class="w-full mt-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all text-xs h-24 resize-none" placeholder="Contoh: Revisi 2x, Format JPG, 3 Hari Pengerjaan"></textarea>
+              </div>
             </div>
           </div>
-          
-          <button type="button" class="w-[60px] h-[60px] rounded-xl bg-[#2F4DC4] text-white flex items-center justify-center hover:bg-brand-navy/90 transition-colors">
-            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM11 14h-2v2h2v2h2v-2h2v-2h-2v-2h-2v2z"/>
-            </svg>
-          </button>
+
+          <!-- Standard Tier -->
+          <div class="p-6 rounded-2xl border-2 border-brand-navy/10 bg-blue-50/30 space-y-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-brand-navy flex items-center justify-center text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.143-6.857L1 12l6.857-2.143L9 3z"/></svg>
+              </div>
+              <h3 class="font-bold text-gray-900">Standard</h3>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Harga</label>
+                <div class="relative mt-1">
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
+                  <input v-model="tiers.standard.price" type="number" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fitur (Pisahkan dengan koma)</label>
+                <textarea v-model="tiers.standard.features" class="w-full mt-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all text-xs h-24 resize-none" placeholder="Contoh: Revisi 5x, Source File, 2 Hari Pengerjaan"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Premium Tier -->
+          <div class="p-6 rounded-2xl border-2 border-amber-100 bg-amber-50/30 space-y-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <h3 class="font-bold text-gray-900">Premium</h3>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Harga</label>
+                <div class="relative mt-1">
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
+                  <input v-model="tiers.premium.price" type="number" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fitur (Pisahkan dengan koma)</label>
+                <textarea v-model="tiers.premium.features" class="w-full mt-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all text-xs h-24 resize-none" placeholder="Contoh: Revisi Sepuasnya, Prioritas, 1 Hari Pengerjaan"></textarea>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -124,5 +247,10 @@ function handleBoost() {
         </Button>
       </div>
     </form>
+    </template>
+    <div v-else class="flex flex-col items-center justify-center min-h-[400px]">
+       <p class="text-gray-500 text-lg">Layanan tidak ditemukan atau Anda tidak memiliki akses.</p>
+       <button @click="router.push('/vendor/catalog')" class="mt-4 text-brand-navy font-bold hover:underline">Kembali ke Katalog</button>
+    </div>
   </div>
 </template>

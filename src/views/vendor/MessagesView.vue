@@ -1,86 +1,273 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { StreamChat } from 'stream-chat'
+import { useAuth } from '../../composables/useAuth'
+import api from '../../api/axios'
 
-const chats = ref([
-  {
-    id: 1,
-    name: 'Jennifer Markus',
-    avatar: 'https://i.pravatar.cc/150?u=jennifer',
-    lastMessage: 'Hey! Did you finish the Hi-Fi wireframes for flora app design?',
-    time: 'Today | 05:30 PM',
-    unread: false,
-    starred: true
-  },
-  {
-    id: 2,
-    name: 'Ammi Watts',
-    avatar: 'https://i.pravatar.cc/150?u=ammi',
-    lastMessage: 'Oh, hello! All perfectly.',
-    time: 'Yesterday | 10:20 AM',
-    unread: true,
-    starred: false
-  }
-])
+const { user } = useAuth()
 
-const activeChat = ref({
-  name: 'Ammi Watts',
-  avatar: 'https://i.pravatar.cc/150?u=ammi',
-  messages: [
-    {
-      id: 1,
-      sender: 'other',
-      text: 'Oh, hello! All perfectly. I will check it and get back to you soon',
-      time: '04:45 PM'
-    },
-    {
-      id: 2,
-      sender: 'me',
-      text: 'Oh, hello! All perfectly. I will check it and get back to you soon',
-      time: '04:45 PM'
-    },
-    {
-      id: 3,
-      sender: 'other',
-      text: 'Saya ingin mengajukan komplain',
-      time: '04:45 PM'
-    },
-    {
-      id: 4,
-      type: 'order_status',
-      orderId: '#ORD-8790',
-      title: 'Penulisan Konten',
-      status: 'DALAM REVISI',
-      deadline: 'Due Today'
-    },
-    {
-      id: 5,
-      sender: 'other',
-      text: 'Saya tidak puas dengan hasil revisi Anda. Saya akan laporkan ini.',
-      time: '05:00 PM'
-    },
-    {
-      id: 6,
-      type: 'order_status',
-      orderId: '#ORD-8790',
-      title: 'Penulisan Konten',
-      status: 'DISPUTE_IN_PROGRESS',
-      deadline: 'Frozen',
-      isDispute: true
-    }
-  ]
+const chatClient = ref<StreamChat | null>(null)
+const channels = ref<any[]>([])
+const activeChannelId = ref<string | null>(null)
+const messageInput = ref('')
+const isLoading = ref(true)
+const isSending = ref(false)
+
+const messagesContainer = ref<HTMLElement | null>(null)
+const messageTrigger = ref(0)
+
+const isOfferModalOpen = ref(false)
+const vendorGigs = ref<any[]>([])
+
+const offerForm = ref({
+  gigId: '',
+  title: '',
+  description: '',
+  price: 0,
+  deadlineDays: 1
 })
 
-const messageInput = ref('')
+const activeChannel = computed(() => {
+  return channels.value.find(c => c.id === activeChannelId.value) || null
+})
 
-const isComplaintModalOpen = ref(false)
+const chatMessages = computed(() => {
+  messageTrigger.value
+  if (!activeChannel.value) return []
+  return [...activeChannel.value.state.messages]
+})
 
-const openComplaintModal = () => {
-  isComplaintModalOpen.value = true
+function getOtherMember(channel: any) {
+  if (!user.value || !channel) return null
+  const members = channel.state.members
+  const otherId = Object.keys(members).find(id => id !== String(user.value?.id))
+  return otherId ? members[otherId].user : null
 }
 
-const closeComplaintModal = () => {
-  isComplaintModalOpen.value = false
+const chatsList = computed(() => {
+  messageTrigger.value
+  return channels.value.map((channel: any) => {
+    const otherUser = getOtherMember(channel)
+    const lastMsgObj = channel.state.messages[channel.state.messages.length - 1]
+    let lastMsgText = 'Belum ada pesan'
+    if (lastMsgObj) {
+      if (lastMsgObj.attachments?.length && lastMsgObj.attachments[0].type === 'custom_offer') {
+        lastMsgText = '📦 [Penawaran Kustom]'
+      } else {
+        lastMsgText = lastMsgObj.text || ''
+      }
+    }
+    const lastMsgTime = lastMsgObj?.created_at ? new Date(lastMsgObj.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''
+    
+    return {
+      id: channel.id,
+      name: otherUser?.name || otherUser?.id || 'User',
+      avatar: otherUser?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser?.name || 'User')}&background=3B5BDB&color=fff`,
+      lastMessage: lastMsgText,
+      time: lastMsgTime,
+      channel: channel
+    }
+  })
+})
+
+async function scrollToBottom() {
+  await nextTick()
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  }
 }
+
+watch(() => chatMessages.value?.length, () => {
+  scrollToBottom()
+})
+
+async function initChat() {
+  if (!user.value) {
+    isLoading.value = false
+    return
+  }
+  try {
+    isLoading.value = true
+    const apiKey = import.meta.env.VITE_STREAM_API_KEY
+    if (!apiKey) {
+      console.error('VITE_STREAM_API_KEY is not defined')
+      return
+    }
+    
+    chatClient.value = StreamChat.getInstance(apiKey)
+    const tokenRes = await api.get('/chat/token')
+    const token = tokenRes.data.token
+
+    await chatClient.value.connectUser(
+      {
+        id: String(user.value.id),
+        name: user.value.fullName || user.value.name,
+        image: user.value.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.value.fullName || user.value.name)}&background=3B5BDB&color=fff`
+      },
+      token
+    )
+
+    await queryChannels()
+
+    // Listen for new messages globally to update lists
+    chatClient.value.on('message.new', handleGlobalMessageNew)
+    chatClient.value.on('message.updated', handleGlobalMessageUpdated)
+
+  } catch (err) {
+    console.error('Error initializing chat:', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function queryChannels() {
+  if (!chatClient.value || !user.value) return
+  const filter = { members: { $in: [String(user.value.id)] } }
+  const sort = { last_message_at: -1 }
+  const res = await chatClient.value.queryChannels(filter, sort as any, {
+    watch: true,
+    state: true
+  })
+  channels.value = res
+  const firstChannel = res[0]
+  if (firstChannel && firstChannel.id && !activeChannelId.value) {
+    await selectChannel(firstChannel.id)
+  }
+}
+
+async function selectChannel(channelId: string) {
+  activeChannelId.value = channelId
+  const channel = channels.value.find(c => c.id === channelId)
+  if (channel) {
+    await channel.markRead()
+    messageTrigger.value++
+    await scrollToBottom()
+  }
+}
+
+function handleGlobalMessageNew(event: any) {
+  queryChannelsListOnly()
+  const cid = event?.channel_id || event?.channel?.id
+  if (cid === activeChannelId.value) {
+    messageTrigger.value++
+  }
+}
+
+function handleGlobalMessageUpdated(event: any) {
+  queryChannelsListOnly()
+  const cid = event?.channel_id || event?.channel?.id
+  if (cid === activeChannelId.value) {
+    messageTrigger.value++
+  }
+}
+
+async function queryChannelsListOnly() {
+  if (!chatClient.value || !user.value) return
+  const filter = { members: { $in: [String(user.value.id)] } }
+  const sort = { last_message_at: -1 }
+  const res = await chatClient.value.queryChannels(filter, sort as any)
+  channels.value = res
+}
+
+async function sendMessage() {
+  if (!messageInput.value.trim() || !activeChannel.value || isSending.value) return
+  isSending.value = true
+  try {
+    await activeChannel.value.sendMessage({
+      text: messageInput.value
+    })
+    messageInput.value = ''
+    messageTrigger.value++
+    await scrollToBottom()
+  } catch (err) {
+    console.error('Failed to send message:', err)
+  } finally {
+    isSending.value = false
+  }
+}
+
+function formatPrice(val: any) {
+  if (!val) return 'Rp 0'
+  return 'Rp ' + Number(val).toLocaleString('id-ID')
+}
+
+function formatMsgTime(dateStr: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+}
+
+async function openOfferModal() {
+  isOfferModalOpen.value = true
+  try {
+    const res = await api.get('/gigs/my-gigs')
+    vendorGigs.value = res.data
+    if (res.data.length > 0) {
+      offerForm.value.gigId = res.data[0].id
+    }
+  } catch (err) {
+    console.error('Failed to load gigs:', err)
+  }
+}
+
+async function submitOffer() {
+  if (!offerForm.value.gigId || !offerForm.value.title.trim() || !offerForm.value.description.trim() || offerForm.value.price <= 0 || offerForm.value.deadlineDays < 1) {
+    alert('Mohon isi semua field penawaran dengan benar.')
+    return
+  }
+  const otherUser = getOtherMember(activeChannel.value)
+  if (!otherUser) {
+    alert('Tidak dapat mendeteksi pembeli.')
+    return
+  }
+  
+  isSending.value = true
+  try {
+    await api.post('/custom-offers/sent', {
+      clientId: Number(otherUser.id),
+      channelId: activeChannel.value.id,
+      gigId: Number(offerForm.value.gigId),
+      price: Number(offerForm.value.price),
+      title: offerForm.value.title,
+      description: offerForm.value.description,
+      deadlineDays: Number(offerForm.value.deadlineDays)
+    })
+    
+    alert('Penawaran kustom berhasil dikirim!')
+    isOfferModalOpen.value = false
+    // Reset form
+    offerForm.value = {
+      gigId: vendorGigs.value[0]?.id || '',
+      title: '',
+      description: '',
+      price: 0,
+      deadlineDays: 1
+    }
+    
+    // Refresh channel messages/state
+    await queryChannels()
+    messageTrigger.value++
+  } catch (err: any) {
+    console.error('Failed to send custom offer:', err)
+    alert(err.response?.data?.message || 'Gagal mengirim penawaran kustom.')
+  } finally {
+    isSending.value = false
+  }
+}
+
+
+
+onMounted(() => {
+  initChat()
+})
+
+onUnmounted(() => {
+  if (chatClient.value) {
+    chatClient.value.off('message.new', handleGlobalMessageNew)
+    chatClient.value.off('message.updated', handleGlobalMessageUpdated)
+    chatClient.value.disconnectUser()
+  }
+})
 </script>
 
 <template>
@@ -93,9 +280,6 @@ const closeComplaintModal = () => {
             <h2 class="text-xl font-bold text-gray-900">All Messages</h2>
             <svg class="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
           </div>
-          <button class="text-gray-400 hover:text-gray-600">
-            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-          </button>
         </div>
 
         <div class="relative">
@@ -111,19 +295,26 @@ const closeComplaintModal = () => {
       </div>
 
       <div class="flex-1 overflow-y-auto">
+        <div v-if="isLoading && channels.length === 0" class="p-6 text-center text-gray-500 text-xs">
+          Memuat obrolan...
+        </div>
+        <div v-else-if="chatsList.length === 0" class="p-6 text-center text-gray-400 text-xs">
+          Belum ada obrolan aktif.
+        </div>
         <div 
-          v-for="chat in chats" 
+          v-else
+          v-for="chat in chatsList" 
           :key="chat.id"
           :class="[
             'p-6 flex gap-4 cursor-pointer transition-colors border-b border-gray-50',
-            chat.id === 1 ? 'bg-[#F8F9FE]' : 'hover:bg-gray-50'
+            chat.id === activeChannelId ? 'bg-[#F8F9FE]' : 'hover:bg-gray-50'
           ]"
+          @click="selectChannel(chat.id)"
         >
           <img :src="chat.avatar" class="w-12 h-12 rounded-2xl object-cover shrink-0" />
           <div class="flex-1 min-w-0">
             <div class="flex justify-between items-start mb-1">
               <h4 class="font-bold text-gray-900 truncate">{{ chat.name }}</h4>
-              <svg v-if="chat.starred" class="w-5 h-5 text-[#4B6BFB]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
             </div>
             <p class="text-xs text-gray-500 line-clamp-2 mb-2 leading-relaxed">{{ chat.lastMessage }}</p>
             <div class="flex items-center gap-1 text-[10px] font-bold text-gray-400">
@@ -137,175 +328,158 @@ const closeComplaintModal = () => {
 
     <!-- Main Chat Area -->
     <div class="flex-1 flex flex-col bg-white">
-      <!-- Chat Header -->
-      <div class="px-8 py-4 border-b border-gray-100 flex items-center gap-4">
-        <img :src="activeChat.avatar" class="w-10 h-10 rounded-xl object-cover" />
-        <h3 class="font-bold text-gray-900">{{ activeChat.name }}</h3>
-      </div>
-
-      <!-- Messages Area -->
-      <div class="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
-        <template v-for="msg in activeChat.messages" :key="msg.id">
-          <!-- Normal Chat Bubble -->
-          <div v-if="!msg.type" :class="['flex flex-col', msg.sender === 'me' ? 'items-end' : 'items-start']">
-            <div 
-              :class="[
-                'max-w-[70%] p-5 rounded-3xl text-sm leading-relaxed',
-                msg.sender === 'me' 
-                  ? 'bg-[#4B6BFB] text-white rounded-tr-none shadow-lg shadow-[#4B6BFB]/20' 
-                  : 'bg-[#E6F0FF] text-gray-800 rounded-tl-none'
-              ]"
-            >
-              {{ msg.text }}
-            </div>
-            <span class="text-[10px] font-bold text-gray-400 mt-2">{{ msg.time }}</span>
+      <template v-if="activeChannel">
+        <!-- Chat Header -->
+        <div class="px-8 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <img :src="getOtherMember(activeChannel)?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(getOtherMember(activeChannel)?.name || 'User')}&background=3B5BDB&color=fff`" class="w-10 h-10 rounded-xl object-cover" />
+            <h3 class="font-bold text-gray-900">{{ getOtherMember(activeChannel)?.name || 'Pembeli' }}</h3>
           </div>
-
-          <!-- Order Status Card -->
-          <div v-else-if="msg.type === 'order_status'" class="w-full max-w-[500px]">
-            <div class="bg-[#F8F9FE] border border-gray-100 rounded-[32px] overflow-hidden shadow-sm">
-              <div class="p-6 border-b border-gray-50 flex justify-between items-center bg-white/50">
-                <h4 class="text-lg font-bold text-[#4B6BFB]">Status Pesanan</h4>
-                <span 
-                  class="px-3 py-1 text-[10px] font-bold rounded-full"
-                  :class="msg.isDispute ? 'bg-gray-100 text-gray-600 border border-gray-200' : 'bg-[#FFF2EB] text-[#FF6B00]'"
-                >
-                  {{ msg.status }}
-                </span>
-              </div>
-              <div class="p-8 space-y-6">
-                <div>
-                  <span class="text-xs font-bold text-[#1E3A8A] mb-1 block">{{ msg.orderId }}</span>
-                  <h3 class="text-xl font-bold text-gray-900">{{ msg.title }}</h3>
-                </div>
-                
-                <div class="flex gap-12">
-                  <div class="space-y-1">
-                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Harga</p>
-                    <p class="text-sm font-bold text-gray-900">-</p>
-                  </div>
-                  <div class="space-y-1">
-                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Deadline</p>
-                    <div class="flex items-center gap-1.5" :class="msg.isDispute ? 'text-gray-400' : 'text-orange-400'">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      <span class="text-sm font-bold">{{ msg.deadline }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="!msg.isDispute" class="grid grid-cols-2 gap-4 pt-2">
-                  <button class="bg-[#4B6BFB] text-white py-3 rounded-xl text-sm font-bold hover:bg-[#4B6BFB]/90 transition-all shadow-md shadow-[#4B6BFB]/20">
-                    Terima Komplain
-                  </button>
-                  <button 
-                    @click="openComplaintModal"
-                    class="bg-white text-gray-800 py-3 rounded-xl text-sm font-bold border border-gray-100 hover:bg-gray-50 transition-all shadow-sm"
-                  >
-                    Tolak
-                  </button>
-                </div>
-                <div v-else class="pt-2">
-                  <router-link 
-                    :to="`/vendor/orders/${msg.orderId.replace('#', '')}/appeal`"
-                    class="w-full bg-[#1E3A8A] text-white py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#1E3A8A]/95 transition-all shadow-xl"
-                  >
-                    Lihat Detail Sengketa
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-                  </router-link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      <!-- Chat Input -->
-      <div class="px-8 py-6 border-t border-gray-100">
-        <div class="flex items-center gap-4 bg-[#F8F9FE] rounded-2xl px-5 py-2">
-          <button class="text-gray-400 hover:text-[#4B6BFB] transition-colors">
-            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
-          </button>
-          <input 
-            v-model="messageInput"
-            type="text" 
-            placeholder="Type your message here ..."
-            class="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 placeholder-gray-400 text-gray-800"
-          />
-          <button class="bg-[#4B6BFB] text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#4B6BFB]/90 transition-all shadow-md">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+          <button 
+            @click="openOfferModal" 
+            class="bg-[#4B6BFB] text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-[#4B6BFB]/90 transition-all shadow-md shadow-[#4B6BFB]/10"
+          >
+            Buat Penawaran
           </button>
         </div>
-      </div>
+
+        <!-- Messages Area -->
+        <div class="flex-1 overflow-y-auto p-8 space-y-8 bg-white" ref="messagesContainer">
+          <template v-for="msg in chatMessages" :key="msg.id">
+            <!-- Normal Chat Bubble -->
+            <div v-if="!(msg.attachments && msg.attachments.length > 0 && msg.attachments[0].type === 'custom_offer')" :class="['flex flex-col', msg.user?.id === String(user?.id) ? 'items-end' : 'items-start']">
+              <div 
+                :class="[
+                  'max-w-[70%] p-5 rounded-3xl text-sm leading-relaxed',
+                  msg.user?.id === String(user?.id) 
+                    ? 'bg-[#4B6BFB] text-white rounded-tr-none shadow-lg shadow-[#4B6BFB]/20' 
+                    : 'bg-[#E6F0FF] text-gray-800 rounded-tl-none'
+                ]"
+              >
+                {{ msg.text }}
+              </div>
+              <span class="text-[10px] font-bold text-gray-400 mt-2">{{ formatMsgTime(msg.created_at) }}</span>
+            </div>
+
+            <!-- Custom Offer Card -->
+            <div v-else class="flex flex-col" :class="msg.user?.id === String(user?.id) ? 'items-end' : 'items-start'">
+              <div class="w-[320px] md:w-[400px] max-w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-white/50">
+                  <h4 class="text-sm font-bold text-[#4B6BFB]">Penawaran Kustom</h4>
+                  <span 
+                    class="px-2.5 py-0.5 text-[10px] font-bold rounded-full"
+                    :class="{
+                      'bg-amber-50 text-amber-600 border border-amber-200': msg.attachments[0].status === 'PENDING',
+                      'bg-emerald-50 text-emerald-600 border border-emerald-200': msg.attachments[0].status === 'ACCEPTED',
+                      'bg-red-50 text-red-600 border border-red-200': msg.attachments[0].status === 'REJECTED'
+                    }"
+                  >
+                    {{ msg.attachments[0].status }}
+                  </span>
+                </div>
+                <div class="p-5 space-y-4">
+                  <div>
+                    <h3 class="text-base font-bold text-gray-900 leading-tight">
+                      {{ msg.text.startsWith('📦 Penawaran Baru: ') ? msg.text.replace('📦 Penawaran Baru: ', '') : msg.text }}
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1">Penawaran kustom telah dikirim ke pembeli.</p>
+                  </div>
+                  
+                  <div class="flex justify-between items-center text-xs border-t border-gray-100 pt-3">
+                    <span class="text-gray-400 font-medium">Harga Penawaran:</span>
+                    <span class="font-bold text-gray-950 text-sm">{{ formatPrice(msg.attachments[0].offer_price) }}</span>
+                  </div>
+                </div>
+              </div>
+              <span class="text-[10px] font-bold text-gray-400 mt-2 block">{{ formatMsgTime(msg.created_at) }}</span>
+            </div>
+          </template>
+        </div>
+
+        <!-- Chat Input -->
+        <div class="px-8 py-6 border-t border-gray-100">
+          <div class="flex items-center gap-4 bg-[#F8F9FE] rounded-2xl px-5 py-2">
+            <button class="text-gray-400 hover:text-[#4B6BFB] transition-colors">
+              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+            </button>
+            <input 
+              v-model="messageInput"
+              type="text" 
+              placeholder="Type your message here ..."
+              class="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 placeholder-gray-400 text-gray-800 outline-none"
+              @keyup.enter="sendMessage"
+            />
+            <button @click="sendMessage" class="bg-[#4B6BFB] text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#4B6BFB]/90 transition-all shadow-md">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+            </button>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div class="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2 2z"/></svg>
+          <p class="text-sm">Pilih obrolan dari daftar di samping untuk memulai chat.</p>
+        </div>
+      </template>
     </div>
 
-    <!-- Complaint Modal -->
+    <!-- Custom Offer Modal -->
     <Teleport to="body">
-      <div v-if="isComplaintModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div v-if="isOfferModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
         <div class="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
-          <div class="bg-[#1E3A8A] px-6 py-4 flex justify-between items-center text-white">
-            <h3 class="text-xl font-bold">Lapor Komplain Client</h3>
-            <button @click="closeComplaintModal" class="hover:bg-white/10 p-1 rounded-lg transition-colors">
+          <div class="bg-[#4B6BFB] px-6 py-4 flex justify-between items-center text-white">
+            <h3 class="text-xl font-bold">Buat Penawaran Kustom</h3>
+            <button @click="isOfferModalOpen = false" class="hover:bg-white/10 p-1 rounded-lg transition-colors">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
           
-          <div class="p-6 space-y-6">
-            <!-- Info Alert -->
-            <div class="bg-[#F8F9FA] rounded-xl p-4 flex gap-4 items-start border border-gray-100">
-              <div class="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
-                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <div class="p-6 space-y-4">
+            <!-- Gig Selector -->
+            <div>
+              <label class="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2 block">Pilih Jasa (Gig)</label>
+              <select v-model="offerForm.gigId" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#4B6BFB]/20 outline-none">
+                <option v-for="gig in vendorGigs" :key="gig.id" :value="gig.id">{{ gig.title }}</option>
+              </select>
+            </div>
+
+            <!-- Title -->
+            <div>
+              <label class="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2 block">Judul Penawaran</label>
+              <input v-model="offerForm.title" type="text" placeholder="Misal: Desain Logo Premium" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#4B6BFB]/20 outline-none" />
+            </div>
+
+            <!-- Description -->
+            <div>
+              <label class="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2 block">Deskripsi Detail Penawaran</label>
+              <textarea v-model="offerForm.description" rows="3" placeholder="Jelaskan apa yang akan Anda berikan pada penawaran ini..." class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#4B6BFB]/20 outline-none resize-none"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <!-- Price -->
+              <div>
+                <label class="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2 block">Harga (Rp)</label>
+                <input v-model.number="offerForm.price" type="number" min="0" placeholder="Harga Penawaran" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#4B6BFB]/20 outline-none" />
               </div>
-              <p class="text-sm text-gray-500 font-medium pt-1 leading-relaxed">
-                Mohon konfirmasi dan komunikasi dengan client, terkait jasa atau barang yang ditawarkan
-              </p>
-            </div>
 
-            <!-- Order Data Card -->
-            <div class="border border-gray-100 rounded-2xl p-6 space-y-4 bg-[#FFFAF5]/30">
-              <h4 class="text-base font-bold text-gray-900">Data Pesanan:</h4>
-              <ul class="space-y-3 text-sm">
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Client: <span class="underline">Ammi Watts</span></span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Nomor Pesanan: ORD-8790</span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Di Ajukan Jam: 00:00</span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full bg-gray-900"></div>
-                  <span class="font-medium text-gray-900">Pembayaran: Transfer Bank-Bank Mandiri (VA)</span>
-                </li>
-              </ul>
-            </div>
-
-            <!-- Screenshot Proof -->
-            <div class="border border-gray-100 rounded-2xl p-6 space-y-4">
-              <h4 class="text-base font-bold text-gray-900">Bukti Screenshot</h4>
-              <div class="flex flex-wrap gap-3">
-                <div class="bg-[#1E3A8A] text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs font-bold shadow-md">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  File_1234.JPEG
-                </div>
-                <div class="bg-[#1E3A8A] text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs font-bold shadow-md">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  File_1234.JPEG
-                </div>
+              <!-- Deadline -->
+              <div>
+                <label class="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2 block">Durasi Pengerjaan (Hari)</label>
+                <input v-model.number="offerForm.deadlineDays" type="number" min="1" placeholder="Hari" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#4B6BFB]/20 outline-none" />
               </div>
             </div>
 
-            <div class="flex justify-end pt-2">
-              <button class="px-8 py-4 bg-[#1E3A8A] text-white font-bold rounded-2xl hover:bg-[#1E3A8A]/95 transition-all shadow-xl">
-                Laporkan Ke CS
+            <div class="flex justify-end pt-4 border-t border-gray-100 gap-3">
+              <button @click="isOfferModalOpen = false" class="px-6 py-2 text-sm font-bold text-gray-500 hover:text-gray-700">Batal</button>
+              <button @click="submitOffer" class="px-6 py-2 bg-[#4B6BFB] text-white font-bold rounded-xl hover:bg-[#4B6BFB]/95 transition-all shadow-md">
+                Kirim Penawaran
               </button>
             </div>
           </div>
         </div>
       </div>
     </Teleport>
+
+
   </div>
 </template>
