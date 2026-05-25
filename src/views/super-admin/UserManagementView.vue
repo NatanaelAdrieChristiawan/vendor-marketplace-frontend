@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useUsers } from '../../composables/useUsers'
+import { ref, computed, watch } from 'vue'
+import { useAdminUsers, useCreateAdmin, useSuspendAdmin, useUnsuspendAdmin, useDeleteAdmin } from '../../composables/useAdminAnalytics'
 import { useSystemConfig } from '../../composables/useSystemConfig'
 
-const { data: rawUsers, isLoading } = useUsers()
+const { data: rawUsers, isLoading } = useAdminUsers()
 const { auditLogsQuery } = useSystemConfig()
 
 const showAddModal = ref(false)
@@ -41,7 +41,7 @@ const users = computed(() => {
   return rawUsers.value.map((u: any) => ({
     id: u.id,
     name: u.fullName,
-    personalEmail: '', // Backend doesn't have this, maybe use first part of email or empty
+    personalEmail: '',
     email: u.email,
     status: u.isSuspended ? 'Suspended' : 'Active',
     role: u.role
@@ -59,6 +59,45 @@ const filteredUsers = computed(() => {
     return matchSearch && matchStatus && matchRole
   })
 })
+
+// ── Pagination ──────────────────────────────────────────
+const currentPage = ref(1)
+const itemsPerPage = 10
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredUsers.value.length / itemsPerPage)))
+
+const paginatedUsers = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  return filteredUsers.value.slice(start, start + itemsPerPage)
+})
+
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  const current = currentPage.value
+  const pages: (number | string)[] = []
+
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (current > 3) pages.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (current < total - 2) pages.push('...')
+    pages.push(total)
+  }
+  return pages
+})
+
+function goToPage(page: number | string) {
+  if (typeof page === 'number' && page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+// Reset to page 1 when filters change
+watch([searchQuery, selectedStatus, selectedRole], () => { currentPage.value = 1 })
 
 const totalAdminAktif = computed(() => {
   return users.value.filter((u: any) => 
@@ -84,10 +123,65 @@ function closeAddModal() {
   showAddModal.value = false
 }
 
-function submitNewAdmin() {
-  // Handle submit logic here
-  console.log('New admin:', newAdmin.value)
-  closeAddModal()
+const createAdminMutation = useCreateAdmin()
+const suspendMutation = useSuspendAdmin()
+const unsuspendMutation = useUnsuspendAdmin()
+const deleteAdminMutation = useDeleteAdmin()
+
+async function submitNewAdmin() {
+  if (!newAdmin.value.name || !newAdmin.value.email || !newAdmin.value.role) {
+    alert('Mohon isi semua field.')
+    return
+  }
+  
+  let backendRole = 'ADMIN_VALIDATOR'
+  if (newAdmin.value.role === 'Finance') {
+    backendRole = 'ADMIN_FINANCE'
+  } else if (newAdmin.value.role === 'Admin Validator' || newAdmin.value.role === 'Validator') {
+    backendRole = 'ADMIN_VALIDATOR'
+  }
+  
+  try {
+    await createAdminMutation.mutateAsync({
+      email: newAdmin.value.email,
+      fullName: newAdmin.value.name,
+      role: backendRole,
+      passwordHash: 'default123'
+    })
+    alert('Admin berhasil ditambahkan!')
+    closeAddModal()
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Gagal menambahkan admin.')
+  }
+}
+
+async function toggleSuspendAdmin() {
+  if (!selectedAdmin.value) return
+  try {
+    if (selectedAdmin.value.status === 'Suspended') {
+      await unsuspendMutation.mutateAsync(Number(selectedAdmin.value.id))
+      selectedAdmin.value.status = 'Active'
+      alert('Admin berhasil diaktifkan kembali.')
+    } else {
+      await suspendMutation.mutateAsync(Number(selectedAdmin.value.id))
+      selectedAdmin.value.status = 'Suspended'
+      alert('Admin berhasil dinonaktifkan.')
+    }
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Gagal mengubah status admin.')
+  }
+}
+
+async function confirmDeleteAdmin() {
+  if (!selectedAdmin.value) return
+  try {
+    await deleteAdminMutation.mutateAsync(Number(selectedAdmin.value.id))
+    alert('Akses admin berhasil dihapus.')
+    showDeleteModal.value = false
+    goBack()
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Gagal menghapus admin.')
+  }
 }
 
 function getRoleColor(role: string) {
@@ -273,12 +367,12 @@ function getRoleColor(role: string) {
                 <td class="px-6 py-4 whitespace-nowrap text-center"><div class="h-8 w-8 bg-gray-200 rounded-full mx-auto"></div></td>
               </tr>
             </template>
-            <tr v-else-if="filteredUsers.length === 0">
+            <tr v-else-if="paginatedUsers.length === 0">
               <td colspan="5" class="px-6 py-12 text-center text-gray-500">
                 Tidak ada data member yang ditemukan
               </td>
             </tr>
-            <template v-else v-for="(user, index) in filteredUsers" :key="index">
+            <template v-else v-for="(user, index) in paginatedUsers" :key="index">
               <tr class="hover:bg-gray-50 transition-colors group">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex flex-col">
@@ -326,7 +420,11 @@ function getRoleColor(role: string) {
 
       <!-- Pagination Footer -->
       <div class="bg-white px-6 py-4 flex items-center border-t border-gray-200 justify-between">
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 transition-colors shadow-sm focus:outline-none">
+        <button 
+          @click="goToPage(currentPage - 1)"
+          :disabled="currentPage === 1"
+          class="flex items-center gap-2 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm focus:outline-none"
+        >
           <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
@@ -335,16 +433,29 @@ function getRoleColor(role: string) {
 
         <!-- Page Numbers -->
         <div class="hidden md:flex items-center gap-1.5">
-          <button class="w-10 h-10 flex items-center justify-center text-sm font-medium rounded-lg bg-gray-100 text-gray-900 transition-colors">1</button>
-          <button class="w-10 h-10 flex items-center justify-center text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">2</button>
-          <button class="w-10 h-10 flex items-center justify-center text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">3</button>
-          <span class="w-10 h-10 flex items-center justify-center text-sm font-medium text-gray-600">...</span>
-          <button class="w-10 h-10 flex items-center justify-center text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">8</button>
-          <button class="w-10 h-10 flex items-center justify-center text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">9</button>
-          <button class="w-10 h-10 flex items-center justify-center text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">10</button>
+          <template v-for="(page, i) in visiblePages" :key="i">
+            <span 
+              v-if="page === '...'" 
+              class="w-10 h-10 flex items-center justify-center text-sm font-medium text-gray-600"
+            >
+              ...
+            </span>
+            <button 
+              v-else
+              @click="goToPage(page)"
+              class="w-10 h-10 flex items-center justify-center text-sm font-medium rounded-lg transition-colors"
+              :class="currentPage === page ? 'bg-[#1E3A8A] text-white shadow-sm font-bold' : 'text-gray-600 hover:bg-gray-50'"
+            >
+              {{ page }}
+            </button>
+          </template>
         </div>
 
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 transition-colors shadow-sm focus:outline-none">
+        <button 
+          @click="goToPage(currentPage + 1)"
+          :disabled="currentPage === totalPages"
+          class="flex items-center gap-2 px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm focus:outline-none"
+        >
           Next
           <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
@@ -365,21 +476,26 @@ function getRoleColor(role: string) {
       <!-- Title & Header Profile -->
       <div class="mb-8">
         <h2 class="text-[17px] font-bold text-[#1E3A8A] mb-4 pb-2 inline-block border-b-2 border-gray-200">
-          Detail Admin: {{ selectedAdmin?.name || 'Alaa Mohamed' }}
+          Detail Admin: {{ selectedAdmin?.name }}
         </h2>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="flex items-center gap-4">
             <div class="w-20 h-20 rounded-full border-[6px] border-orange-50 overflow-hidden">
-              <img src="https://i.pravatar.cc/150?img=47" alt="Profile" class="w-full h-full object-cover" />
+              <img :src="`https://ui-avatars.com/api/?name=${encodeURIComponent(selectedAdmin?.name || 'Admin')}&background=random`" alt="Profile" class="w-full h-full object-cover" />
             </div>
             <div>
-              <h3 class="text-xl font-bold text-[#1E3A8A]">{{ selectedAdmin?.name || 'Alaa Mohamed' }}</h3>
-              <p class="text-[15px] text-[#1E3A8A]/80">{{ selectedAdmin?.role || 'Admin Validator' }}</p>
+              <h3 class="text-xl font-bold text-[#1E3A8A]">{{ selectedAdmin?.name }}</h3>
+              <p class="text-[15px] text-[#1E3A8A]/80">{{ selectedAdmin?.role }}</p>
             </div>
           </div>
-          <button @click="showDeleteModal = true" class="bg-[#EF4444] hover:bg-red-600 text-white px-8 py-3 rounded-xl text-sm font-bold transition-colors self-start sm:self-center shadow-sm">
-            Hapus Akses
-          </button>
+          <div class="flex gap-3">
+            <button @click="toggleSuspendAdmin" class="px-6 py-3 rounded-xl text-sm font-bold transition-colors shadow-sm text-white" :class="selectedAdmin?.status === 'Suspended' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-500 hover:bg-orange-600'">
+              {{ selectedAdmin?.status === 'Suspended' ? 'Aktifkan Kembali' : 'Suspend' }}
+            </button>
+            <button @click="showDeleteModal = true" class="bg-[#EF4444] hover:bg-red-600 text-white px-8 py-3 rounded-xl text-sm font-bold transition-colors self-start sm:self-center shadow-sm">
+              Hapus Akses
+            </button>
+          </div>
         </div>
       </div>
       
@@ -540,7 +656,7 @@ function getRoleColor(role: string) {
               <!-- Action Button -->
               <div class="flex justify-center">
                 <button
-                  @click="showDeleteModal = false; goBack()"
+                  @click="confirmDeleteAdmin"
                   class="bg-[#EF4444] hover:bg-red-600 text-white px-10 py-3.5 rounded-xl text-base font-bold transition-colors w-[80%] shadow-sm"
                 >
                   Hapus Akses

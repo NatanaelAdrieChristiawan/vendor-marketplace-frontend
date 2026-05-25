@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useTransactions } from '../../composables/useTransactions'
+import { useTransactions, useFinancialSummary } from '../../composables/useTransactions'
 import { useWithdrawals } from '../../composables/useWithdrawals'
 import { useRefunds } from '../../composables/useRefunds'
 
 const { allTransactionsQuery } = useTransactions()
 const { pendingWithdrawalsQuery } = useWithdrawals()
 const { refundsQuery } = useRefunds()
+const { data: financialSummary } = useFinancialSummary('month')
 
 const pendingPaymentsCount = computed(() => {
   const txs = allTransactionsQuery.data.value || []
@@ -22,16 +23,25 @@ const approvedRefundsCount = computed(() => {
 })
 
 const totalEscrow = computed(() => {
-  const txs = allTransactionsQuery.data.value || []
-  const verifiedTxs = txs.filter((t: any) => t.status === 'VERIFIED')
-  return verifiedTxs.reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+  return financialSummary.value?.escrow?.balance || 0
 })
 
-const todayEscrow = computed(() => {
-  const txs = allTransactionsQuery.data.value || []
-  const today = new Date().toDateString()
-  const todayVerifiedTxs = txs.filter((t: any) => t.status === 'VERIFIED' && new Date(t.createdAt).toDateString() === today)
-  return todayVerifiedTxs.reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+const todayEscrowText = computed(() => {
+  const activeCount = financialSummary.value?.escrow?.activeOrderCount || 0
+  return `${activeCount} Pesanan Aktif`
+})
+
+const growthText = computed(() => {
+  const growth = financialSummary.value?.revenue?.growth?.revenuePercent || 0
+  return `${growth >= 0 ? '↑' : '↓'} ${Math.abs(growth)} %`
+})
+
+const platformRevenue = computed(() => {
+  return financialSummary.value?.revenue?.current?.platformRevenue || 0
+})
+
+const completedOrderCount = computed(() => {
+  return financialSummary.value?.revenue?.current?.completedCount || 0
 })
 
 const recentActivities = computed(() => {
@@ -68,7 +78,7 @@ function formatPrice(val: any) {
     </div>
 
     <!-- Stat Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
       <!-- Pembayaran Masuk Tertunda -->
       <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4">
         <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
@@ -108,6 +118,32 @@ function formatPrice(val: any) {
         </div>
       </div>
 
+      <!-- Platform Revenue -->
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4">
+        <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-3xl font-bold text-gray-900">{{ formatPrice(platformRevenue) }}</p>
+          <p class="text-sm text-gray-500 mt-1">Pendapatan Platform (Komisi)</p>
+        </div>
+      </div>
+
+      <!-- Sent Orders Count -->
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4">
+        <div class="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center">
+          <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-3xl font-bold text-gray-900">{{ completedOrderCount }} order</p>
+          <p class="text-sm text-gray-500 mt-1">Order Terkirim & Selesai</p>
+        </div>
+      </div>
+
       <!-- Saldo Escrow -->
       <div class="bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl p-6 shadow-sm text-white flex flex-col justify-between">
         <div class="flex items-start justify-between">
@@ -116,15 +152,15 @@ function formatPrice(val: any) {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
           </div>
-          <span class="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">↑ 0,8 %</span>
+          <span class="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{{ growthText }}</span>
         </div>
         <div class="mt-4">
           <p class="text-2xl font-bold">{{ formatPrice(totalEscrow) }}</p>
           <p class="text-white/80 text-sm mt-0.5">Saldo Escrow</p>
         </div>
         <div class="mt-3 pt-3 border-t border-white/20">
-          <p class="text-lg font-bold">{{ formatPrice(todayEscrow) }}</p>
-          <p class="text-white/70 text-xs">Hari Ini</p>
+          <p class="text-lg font-bold">{{ todayEscrowText }}</p>
+          <p class="text-white/70 text-xs">Total Berjalan</p>
         </div>
       </div>
     </div>

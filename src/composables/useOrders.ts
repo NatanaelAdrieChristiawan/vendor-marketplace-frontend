@@ -3,17 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import api from '../api/axios'
 
 export function useOrderDetail(orderId: string | number) {
-  const { data: incomingOrders, isLoading } = useIncomingOrders()
-  
-  const order = computed(() => {
-    if (!incomingOrders.value) return null
-    return incomingOrders.value.find((o: any) => String(o.id) === String(orderId)) || null
+  return useQuery({
+    queryKey: ['order', String(orderId)],
+    queryFn: async () => {
+      const res = await api.get(`/orders/${orderId}`)
+      return res.data
+    },
+    enabled: computed(() => !!orderId)
   })
-
-  return {
-    data: order,
-    isLoading
-  }
 }
 
 export function useMyOrders() {
@@ -43,8 +40,9 @@ export function useAcceptOrder() {
       const res = await api.patch(`/orders/${orderId}/accept`)
       return res.data
     },
-    onSuccess: () => {
+    onSuccess: (_data, orderId) => {
       queryClient.invalidateQueries({ queryKey: ['orders', 'incoming'] })
+      queryClient.invalidateQueries({ queryKey: ['order', String(orderId)] })
     }
   })
 }
@@ -91,9 +89,8 @@ export function useOrderById(orderId: string | number) {
   return useQuery({
     queryKey: ['order', String(orderId)],
     queryFn: async () => {
-      const res = await api.get(`/orders/my-orders`)
-      const orders = res.data
-      return orders.find((o: any) => String(o.id) === String(orderId))
+      const res = await api.get(`/orders/${orderId}`)
+      return res.data
     },
     enabled: computed(() => !!orderId)
   })

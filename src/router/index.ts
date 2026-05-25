@@ -160,6 +160,16 @@ const routes = [
         component: SystemConfigView,
       },
       {
+        path: 'user-moderation',
+        name: 'SuperAdminUserModeration',
+        component: () => import('../views/admin-validator/UserModerationView.vue'),
+      },
+      {
+        path: 'user-moderation/:id/activity',
+        name: 'SuperAdminUserActivity',
+        component: () => import('../views/admin-validator/UserActivityView.vue'),
+      },
+      {
         path: 'disputes',
         name: 'Disputes',
         component: () => import('../views/super-admin/DisputesView.vue'),
@@ -228,7 +238,7 @@ const routes = [
     path: '/admin-validator',
     component: AdminValidatorLayout,
     redirect: '/admin-validator/dashboard',
-    meta: { requiresAuth: true, role: ['ADMIN_VALIDATOR'] },
+    meta: { requiresAuth: true, role: ['ADMIN_VALIDATOR', 'SUPER_ADMIN'] },
     children: [
       {
         path: 'dashboard',

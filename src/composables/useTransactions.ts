@@ -27,3 +27,15 @@ export function useTransactions() {
     verifyTransactionMutation
   }
 }
+
+export function useFinancialSummary(period: 'day' | 'week' | 'month' = 'month') {
+  return useQuery({
+    queryKey: ['transactions', 'financial-summary', period],
+    queryFn: async () => {
+      const { data } = await api.get('/transactions/financial-summary', {
+        params: { period }
+      })
+      return data
+    }
+  })
+}

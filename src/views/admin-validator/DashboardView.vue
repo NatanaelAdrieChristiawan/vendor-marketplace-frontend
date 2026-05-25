@@ -54,9 +54,36 @@ const pendingGigs = computed(() => {
   return pendingGigsQuery.data.value || []
 })
 
-function goToVerification(id: number) {
+// Detail Modal state for Gigs
+const activeGigDetail = ref<any>(null)
+const showDetailModal = ref(false)
+
+function goToVerification(id: number | string) {
   router.push(`/admin-validator/vendor-verification/${id}`)
 }
+
+function openGigDetailModal(gig: any) {
+  activeGigDetail.value = gig
+  showDetailModal.value = true
+}
+
+function closeGigDetailModal() {
+  activeGigDetail.value = null
+  showDetailModal.value = false
+}
+
+function getParsedDesc(description: string) {
+  try {
+    return JSON.parse(description)
+  } catch (e) {
+    return { text: description, tiers: null, extraMedia: [] }
+  }
+}
+
+const activeGigParsedDesc = computed(() => {
+  if (!activeGigDetail.value) return { text: '', tiers: null, extraMedia: [] }
+  return getParsedDesc(activeGigDetail.value.description)
+})
 
 // Rejection Modal state for Gigs
 const activeGigToReject = ref<any>(null)
@@ -223,6 +250,9 @@ function formatPrice(val: any) {
               </td>
               <td class="px-6 py-4 text-right">
                 <div class="flex items-center justify-end gap-2">
+                  <button @click="openGigDetailModal(gigItem)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm">
+                    Detail
+                  </button>
                   <button @click="handleApproveGig(gigItem.id)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm">
                     Setujui
                   </button>
@@ -259,9 +289,109 @@ function formatPrice(val: any) {
           <button @click="showRejectModal = false" class="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors">
             Batal
           </button>
-          <button @click="submitRejectGig" class="px-4 py-2 bg-rose-600 text-white text-sm font-bold rounded-xl hover:bg-rose-700 transition-colors">
-            Kirim Penolakan
+          <button @click="submitRejectGig" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
+            Tolak
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gig Detail Modal -->
+    <div v-if="showDetailModal && activeGigDetail" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 animate-scale-in flex flex-col">
+        <!-- Modal Header -->
+        <div class="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+          <div>
+            <h3 class="text-xl font-bold text-gray-900">Detail Pengajuan Layanan</h3>
+            <p class="text-xs text-gray-500 mt-1">Review detail penawaran jasa dari merchant sebelum verifikasi.</p>
+          </div>
+          <button @click="closeGigDetailModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <!-- Modal Content -->
+        <div class="p-8 space-y-6 overflow-y-auto flex-1">
+          <!-- Title & Banner -->
+          <div class="flex flex-col md:flex-row gap-6">
+            <div class="w-full md:w-1/3 shrink-0">
+              <img :src="activeGigDetail.mediaUrls || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=300&q=80'" class="w-full h-40 object-cover rounded-2xl border border-gray-150 shadow-sm" />
+            </div>
+            <div class="flex-1 space-y-3">
+              <h2 class="text-2xl font-extrabold text-gray-900 leading-tight">{{ activeGigDetail.title }}</h2>
+              <div class="flex flex-wrap gap-2">
+                <span class="px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold rounded-full">
+                  Kategori: {{ activeGigDetail.category?.name || 'Umum' }}
+                </span>
+                <span class="px-3 py-1 bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold rounded-full">
+                  Toko: {{ activeGigDetail.merchant?.shopName || 'Vendor' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Description Section -->
+          <div class="space-y-2">
+            <h4 class="text-xs font-bold text-blue-900 tracking-wider uppercase">Deskripsi Utama</h4>
+            <div class="bg-gray-50 border border-gray-100 rounded-2xl p-5 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {{ activeGigParsedDesc.text }}
+            </div>
+          </div>
+
+          <!-- Extra Portfolio Images -->
+          <div v-if="activeGigParsedDesc.extraMedia?.length" class="space-y-3">
+            <h4 class="text-xs font-bold text-blue-900 tracking-wider uppercase">Portfolio Tambahan</h4>
+            <div class="flex flex-wrap gap-3">
+              <img 
+                v-for="(url, i) in activeGigParsedDesc.extraMedia" 
+                :key="i"
+                :src="url" 
+                class="w-24 h-16 object-cover rounded-xl border border-gray-200 hover:border-blue-500 hover:scale-105 transition-all cursor-zoom-in"
+              />
+            </div>
+          </div>
+
+          <!-- Tiers & Pricing Section -->
+          <div v-if="activeGigParsedDesc.tiers" class="space-y-3">
+            <h4 class="text-xs font-bold text-blue-900 tracking-wider uppercase">Paket & Fitur Layanan</h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div 
+                v-for="(tier, key) in activeGigParsedDesc.tiers" 
+                :key="key"
+                class="border border-gray-150 rounded-2xl p-5 bg-white flex flex-col justify-between"
+              >
+                <div>
+                  <span class="px-2.5 py-0.5 bg-gray-100 text-gray-700 text-[10px] font-extrabold rounded-full uppercase tracking-wider">{{ key }}</span>
+                  <h5 class="text-lg font-bold text-gray-900 mt-2">{{ formatPrice(tier.price) }}</h5>
+                </div>
+                <div class="mt-4 text-xs text-gray-500 leading-relaxed border-t border-gray-100 pt-3">
+                  <p class="font-semibold text-gray-700 mb-1">Fitur:</p>
+                  {{ tier.features || '-' }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-6 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-b-3xl">
+          <button @click="closeGigDetailModal" class="px-5 py-2.5 border border-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors">
+            Tutup
+          </button>
+          <div class="flex items-center gap-3">
+            <button 
+              @click="handleApproveGig(activeGigDetail.id); closeGigDetailModal();" 
+              class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+            >
+              Setujui
+            </button>
+            <button 
+              @click="openRejectGigModal(activeGigDetail); closeGigDetailModal();" 
+              class="bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+            >
+              Tolak
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -273,20 +403,17 @@ function formatPrice(val: any) {
   animation: fadeIn 0.4s ease-out forwards;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-</style>
-
-
-<style scoped>
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
+.animate-scale-in {
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 </style>

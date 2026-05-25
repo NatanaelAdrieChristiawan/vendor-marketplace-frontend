@@ -65,6 +65,25 @@ export function useAuth() {
     }
   })
 
+  const adminLoginMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const response = await api.post('/auth/admin/login', payload)
+      return response.data
+    },
+    onSuccess: (res) => {
+      if (res.status === 'success' || res.data) {
+        const { access_token, user } = res.data
+        const mappedUser = {
+          ...user,
+          id: String(user.id || user.sub),
+          name: user.fullName || user.name || 'User'
+        }
+        authStore.setAuth(mappedUser, access_token)
+        redirectByRole(user.role)
+      }
+    }
+  })
+
   const signUpMutation = useMutation({
     mutationFn: async (payload: any) => {
       const apiPayload = {
@@ -260,6 +279,7 @@ export function useAuth() {
     user,
     logout,
     loginMutation,
+    adminLoginMutation,
     signUpMutation,
     profileQuery,
     registerVendorMutation,

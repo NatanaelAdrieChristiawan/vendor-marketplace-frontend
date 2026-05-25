@@ -89,9 +89,8 @@ async function submitProof() {
 
 async function fetchOrder() {
   try {
-    const res = await api.get('/orders/my-orders')
-    const allOrders = res.data
-    order.value = allOrders.find((o: any) => o.id === orderId)
+    const res = await api.get(`/orders/${orderId}`)
+    order.value = res.data
   } catch (err) {
     console.error('Failed to fetch order details', err)
   } finally {
@@ -105,17 +104,16 @@ onMounted(async () => {
   await fetchOrder()
   pollInterval = setInterval(fetchOrder, 4000)
 
-  // Load chat messages from localStorage if any
-  const existingMsgs = JSON.parse(localStorage.getItem('automated_chat_messages') || '[]')
-  const orderMsg = existingMsgs.find((m: any) => m.orderId === `#ORD-${orderId}`)
-  if (orderMsg) {
+  if (order.value) {
+    const reqPlan = order.value.requirements?.plan || 'Standard Plan'
+    const reqNotes = order.value.requirements?.notes || 'Tidak ada instruksi khusus.'
     chatMessages.value.push({
       id: Date.now() - 1000,
       sender: 'user',
       name: 'Pembeli',
       avatar: '',
-      text: `Halo, saya telah membuat pesanan baru.\n\nDetail Rencana: ${orderMsg.plan}\nCatatan Pembeli: ${orderMsg.notes}`,
-      time: orderMsg.time
+      text: `Halo, saya telah membuat pesanan baru.\n\nDetail Rencana: ${reqPlan}\nCatatan Pembeli: ${reqNotes}`,
+      time: new Date(order.value.createdAt || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     })
   }
 

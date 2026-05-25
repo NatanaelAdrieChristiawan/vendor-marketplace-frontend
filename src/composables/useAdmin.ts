@@ -32,6 +32,16 @@ export function useAdmin() {
     }
   })
 
+  const suspendUserMutation = useMutation({
+    mutationFn: async ({ id, isSuspended, reason, days }: { id: number, isSuspended: boolean, reason?: string, days?: number }) => {
+      const response = await api.patch(`/admin/validator/users/${id}/suspend`, { isSuspended, reason, days })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    }
+  })
+
   const pendingGigsQuery = useQuery({
     queryKey: ['admin', 'gigs', 'pending'],
     queryFn: async () => {
@@ -102,6 +112,7 @@ export function useAdmin() {
     pendingMerchantsQuery,
     verifyMerchantMutation,
     suspendMerchantMutation,
+    suspendUserMutation,
     pendingGigsQuery,
     verifyGigMutation,
     pendingDisputesQuery,

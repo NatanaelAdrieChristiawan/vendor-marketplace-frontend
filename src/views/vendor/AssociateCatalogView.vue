@@ -1,74 +1,76 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useMyGigs } from '../../composables/useGigs'
 
 const router = useRouter()
 
 const activeTab = ref('Semua')
 const tabs = ['Semua', 'Menunggu', 'Disetujui', 'Ditolak', 'Draf']
 
-const gigs = ref([
-  {
-    id: 1,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 'Rp45.000',
-    status: 'DIBATASI',
-    statusClass: 'bg-gray-800 text-white',
-    promoDisabled: true,
-    image: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?q=80&w=500',
-    category: 'Semua'
-  },
-  {
-    id: 2,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 'Rp45.000',
-    status: 'AKTIF',
-    statusClass: 'bg-[#E6F0FF] text-[#4B6BFB]',
-    hasBoost: true,
-    image: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?q=80&w=500',
-    category: 'Disetujui'
-  },
-  {
-    id: 3,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 'Rp45.000',
-    status: 'MENUNGGU PERSETUJUAN',
-    statusClass: 'bg-blue-50 text-blue-500',
-    isReviewing: true,
-    image: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?q=80&w=500',
-    category: 'Menunggu'
-  },
-  {
-    id: 4,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 'Rp45.000',
-    status: 'DITOLAK',
-    statusClass: 'bg-red-50 text-red-500',
-    hasNote: true,
-    note: '"Harga terlalu rendah untuk posisi brand saat ini. Sesuaikan minimal menjadi Rp50.000"',
-    image: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?q=80&w=500',
-    category: 'Ditolak'
-  },
-  {
-    id: 5,
-    title: 'Desain logo',
-    description: 'Desain logo lengkap, palet warna, dan template media sosial untuk kebutuhan premiu',
-    price: 'Rp45.000',
-    status: 'DIBATASI',
-    statusClass: 'bg-gray-800 text-white',
-    isDraft: true,
-    image: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?q=80&w=500',
-    category: 'Draf'
-  }
-])
+const { data: myGigs, isLoading } = useMyGigs()
+
+const mappedGigs = computed(() => {
+  const list = myGigs.value || []
+  return list.map((g: any) => {
+    let statusLabel = 'MENUNGGU PERSETUJUAN'
+    let statusClass = 'bg-blue-50 text-blue-500'
+    let tabCategory = 'Menunggu'
+    let isReviewing = false
+    let hasBoost = false
+    let hasNote = false
+    let isDraft = false
+
+    if (g.status === 'PENDING') {
+      statusLabel = 'MENUNGGU PERSETUJUAN'
+      statusClass = 'bg-blue-50 text-blue-500'
+      tabCategory = 'Menunggu'
+      isReviewing = true
+    } else if (g.status === 'APPROVED' || g.status === 'ACTIVE' || g.status === 'FEATURED') {
+      statusLabel = 'AKTIF'
+      statusClass = 'bg-[#E6F0FF] text-[#4B6BFB]'
+      tabCategory = 'Disetujui'
+      hasBoost = g.status === 'FEATURED'
+    } else if (g.status === 'REJECTED') {
+      statusLabel = 'DITOLAK'
+      statusClass = 'bg-red-50 text-red-500'
+      tabCategory = 'Ditolak'
+      hasNote = !!g.rejectionReason
+    } else if (g.status === 'DRAFT') {
+      statusLabel = 'DRAFT'
+      statusClass = 'bg-gray-800 text-white'
+      tabCategory = 'Draf'
+      isDraft = true
+    } else if (g.status === 'SUSPENDED') {
+      statusLabel = 'DITANGGUHKAN'
+      statusClass = 'bg-red-100 text-red-700'
+      tabCategory = 'Ditolak'
+    }
+
+    return {
+      id: g.id,
+      title: g.title,
+      description: g.description,
+      price: 'Rp ' + Number(g.price).toLocaleString('id-ID'),
+      status: statusLabel,
+      statusClass,
+      promoDisabled: g.status === 'DRAFT' || g.status === 'REJECTED',
+      hasBoost,
+      isReviewing,
+      hasNote,
+      note: g.rejectionReason,
+      isDraft,
+      image: g.coverImage || 'https://images.unsplash.com/photo-1626785774573-4b799315345d?q=80&w=500',
+      category: tabCategory
+    }
+  })
+})
 
 const filteredGigs = computed(() => {
-  if (activeTab.value === 'Semua') return gigs.value.filter(g => !g.isDraft)
-  return gigs.value.filter(g => g.category === activeTab.value)
+  if (activeTab.value === 'Semua') {
+    return mappedGigs.value.filter((g: any) => !g.isDraft)
+  }
+  return mappedGigs.value.filter((g: any) => g.category === activeTab.value)
 })
 
 function navigateToDetail(id: number) {
@@ -105,7 +107,16 @@ function navigateToDetail(id: number) {
       </router-link>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+    <div v-if="isLoading" class="flex flex-col items-center justify-center py-12 text-gray-500">
+      <div class="w-8 h-8 border-4 border-gray-200 border-t-[#1E3A8A] rounded-full animate-spin"></div>
+      <p class="mt-4 text-sm font-medium">Memuat daftar layanan...</p>
+    </div>
+
+    <div v-else-if="!filteredGigs.length" class="flex flex-col items-center justify-center py-12 text-gray-400">
+      <p class="text-sm">Tidak ada layanan di kategori ini.</p>
+    </div>
+
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
       <div 
         v-for="gig in filteredGigs" 
         :key="gig.id"

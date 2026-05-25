@@ -1,39 +1,161 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ClientFooter from '../../components/client/ClientFooter.vue'
+import { useGigDetail, useReviews } from '../../composables/useGigs'
 
+const route = useRoute()
 const router = useRouter()
+const productId = route.params.id as string
 
 type PlanKey = 'basic' | 'standard' | 'premium'
 const selectedPlan = ref<PlanKey>('standard')
 
-const plans: Record<PlanKey, { name: string; price: string; features: string[] }> = {
-  basic: { name: 'Paket Basic', price: 'Rp25.000', features: ['Basic Product Design', 'Satu Pilihan', 'Desain simpel'] },
-  standard: { name: 'Paket standard', price: 'Rp50.000', features: ['Full Product Design', 'Banyak Pilihan', 'Dasar Desain sistem'] },
-  premium: { name: 'Paket Premium', price: 'Rp150.000', features: ['Premium Product Design', 'Unlimited Pilihan', 'Full Desain sistem', 'Source file'] },
+const { data: gig, isLoading: isGigLoading } = useGigDetail(productId)
+const { data: reviewsData, isLoading: isReviewsLoading } = useReviews(productId)
+const isLoading = computed(() => isGigLoading.value || isReviewsLoading.value)
+
+const plans = ref<Record<PlanKey, { name: string; price: string; features: string[] }>>({
+  basic: { name: 'Paket Basic', price: 'Rp0', features: [] },
+  standard: { name: 'Paket Standard', price: 'Rp0', features: [] },
+  premium: { name: 'Paket Premium', price: 'Rp0', features: [] },
+})
+
+const reviews = computed(() => {
+  const list = reviewsData.value || []
+  if (list.length === 0) {
+    return [
+      { name: 'Andi Pratama', rating: 5, date: '2 minggu yang lalu', text: 'Respon sangat cepat dan revisi dilakukan dengan teliti.' }
+    ]
+  }
+  return list.map((r: any) => ({
+    name: r.user?.fullName || 'User',
+    rating: r.rating,
+    date: new Date(r.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+    text: r.comment || 'Ulasan tanpa komentar.'
+  }))
+})
+
+const averageRating = computed(() => {
+  const list = reviewsData.value || []
+  if (list.length === 0) return '4.9'
+  const total = list.reduce((sum: number, r: any) => sum + r.rating, 0)
+  return (total / list.length).toFixed(1)
+})
+
+const reviewCount = computed(() => {
+  const list = reviewsData.value || []
+  return list.length === 0 ? 20 : list.length
+})
+
+function formatRupiah(val: number | string) {
+  const num = typeof val === 'string' ? parseFloat(val) : val
+  if (isNaN(num)) return 'Rp 0'
+  return 'Rp ' + num.toLocaleString('id-ID')
 }
 
-const compareTable = [
-  { feature: 'Pilihan Desain', basic: '1 Section', standard: '5 Section', premium: '12 Section' },
-  { feature: 'Revisi', basic: '1x', standard: '3x', premium: 'Unlimited' },
-  { feature: 'Pengerjaan', basic: '3 Hari', standard: '7 Hari', premium: '14 Hari' },
-]
+function parseFeatures(features: any): string[] {
+  if (Array.isArray(features)) return features
+  if (typeof features === 'string') {
+    return features.split(',').map(f => f.trim()).filter(Boolean)
+  }
+  return []
+}
 
-const reviews = [
-  { name: 'Andi Pratama', rating: 5, date: '2 minggu yang lalu', text: 'Respon sangat cepat dan revisi dilakukan dengan teliti.' },
-]
+const descriptionText = computed(() => {
+  if (!gig.value) return ''
+  try {
+    const parsed = JSON.parse(gig.value.description)
+    return parsed.text || parsed.description || gig.value.description
+  } catch (e) {
+    return gig.value.description
+  }
+})
 
-onMounted(() => {
-  const observer = new IntersectionObserver((entries) => {
+watch(gig, (newVal) => {
+  if (!newVal) return
+  let descJson: any = null
+  try {
+    descJson = JSON.parse(newVal.description)
+  } catch (e) {
+  }
+
+  const basePrice = typeof newVal.price === 'string' ? parseFloat(newVal.price) : newVal.price
+
+  if (descJson && descJson.tiers) {
+    plans.value = {
+      basic: {
+        name: descJson.tiers.basic?.name || 'Paket Basic',
+        price: formatRupiah(descJson.tiers.basic?.price),
+        features: parseFeatures(descJson.tiers.basic?.features)
+      },
+      standard: {
+        name: descJson.tiers.standard?.name || 'Paket Standard',
+        price: formatRupiah(descJson.tiers.standard?.price || basePrice),
+        features: parseFeatures(descJson.tiers.standard?.features)
+      },
+      premium: {
+        name: descJson.tiers.premium?.name || 'Paket Premium',
+        price: formatRupiah(descJson.tiers.premium?.price),
+        features: parseFeatures(descJson.tiers.premium?.features)
+      }
+    }
+  } else {
+    plans.value = {
+      basic: {
+        name: 'Paket Basic',
+        price: formatRupiah(basePrice * 0.6),
+        features: ['Pengiriman Cepat', 'Revisi 1x', 'Desain Standard']
+      },
+      standard: {
+        name: 'Paket Standard',
+        price: formatRupiah(basePrice),
+        features: ['Pengiriman Cepat', 'Revisi 3x', 'Desain Professional', 'File Sumber (PSD/Figma)']
+      },
+      premium: {
+        name: 'Paket Premium',
+        price: formatRupiah(basePrice * 1.8),
+        features: ['Pengiriman Super Cepat', 'Revisi Unlimited', 'Desain Premium Kualitas Tinggi', 'File Sumber', 'Hak Komersial']
+      }
+    }
+  }
+}, { immediate: true })
+
+const compareTable = computed(() => {
+  const basicPrice = plans.value.basic.price
+  const standardPrice = plans.value.standard.price
+  const premiumPrice = plans.value.premium.price
+  return [
+    { feature: 'Harga Paket', basic: basicPrice, standard: standardPrice, premium: premiumPrice },
+    { feature: 'Revisi', basic: '1x', standard: '3x', premium: 'Unlimited' },
+    { feature: 'Pengerjaan', basic: '3 Hari', standard: '7 Hari', premium: '14 Hari' },
+  ]
+})
+
+let observer: IntersectionObserver | null = null
+
+function initObserver() {
+  observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => {
       if (e.isIntersecting) {
         e.target.classList.add('visible')
-        observer.unobserve(e.target)
+        observer?.unobserve(e.target)
       }
     })
-  }, { threshold: 0.1 })
-  document.querySelectorAll('.anim-in').forEach((el) => observer.observe(el))
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' })
+  document.querySelectorAll('.anim-in').forEach((el) => observer?.observe(el))
+}
+
+onMounted(() => {
+  initObserver()
+})
+
+watch(isLoading, (loading) => {
+  if (!loading) {
+    nextTick(() => {
+      initObserver()
+    })
+  }
 })
 
 function goBack() {
@@ -50,34 +172,37 @@ function goBack() {
         </svg>
       </button>
 
-      <div class="content-grid">
+      <!-- Loading State -->
+      <div v-if="isLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Memuat detail layanan...</p>
+      </div>
+
+      <div v-else-if="gig" class="content-grid">
         <div class="main-col">
-          <h1 class="title anim-in">Desain Produk Untuk Bisnis Anda</h1>
+          <h1 class="title anim-in">{{ gig.title }}</h1>
           
           <div class="image-container anim-in">
-            <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1000" alt="Product" class="main-image" />
+            <img :src="gig.coverImage || 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1000'" alt="Product" class="main-image" />
           </div>
 
           <section class="section anim-in">
             <h2 class="section-title">Tentang Jasa Ini</h2>
-            <p class="description">
-              Apakah Anda mencari desain produk yang tidak hanya terlihat cantik tetapi juga unik untuk bisnis Anda?
-              Saya menawarkan solusi desain produk kelas dunia yang disesuaikan dengan kebutuhan spesifik industri Anda.
-            </p>
+            <p class="description">{{ descriptionText }}</p>
           </section>
 
-          <div class="vendor-card anim-in">
+          <div class="vendor-card anim-in" v-if="gig.merchant">
             <div class="vendor-avatar">
-              <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150" alt="Sarah" />
+              <img :src="gig.merchant.logoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(gig.merchant.shopName)}&background=random`" alt="Vendor logo" />
             </div>
             <div class="vendor-info">
-              <h3 class="vendor-name">Sarah</h3>
-              <p class="vendor-title">Expert Product Designer</p>
+              <h3 class="vendor-name">{{ gig.merchant.shopName }}</h3>
+              <p class="vendor-title">{{ gig.merchant.badge || 'Professional Seller' }}</p>
               <div class="vendor-rating">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="#F59E0B">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                <span>4.9 (20 ulasan)</span>
+                <span>{{ averageRating }} ({{ reviewCount }} ulasan)</span>
               </div>
             </div>
           </div>
@@ -113,15 +238,15 @@ function goBack() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="#F59E0B">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                <strong>4.9</strong>
-                <span>dari 20 ulasan</span>
+                <strong>{{ averageRating }}</strong>
+                <span>dari {{ reviewCount }} ulasan</span>
               </div>
             </div>
 
             <div v-for="review in reviews" :key="review.name" class="review-item">
               <div class="review-top">
                 <div class="review-user-avatar">
-                  <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150" alt="User" />
+                  <img :src="`https://ui-avatars.com/api/?name=${encodeURIComponent(review.name)}&background=random`" alt="User" />
                 </div>
                 <div class="review-user-info">
                   <h4>{{ review.name }}</h4>

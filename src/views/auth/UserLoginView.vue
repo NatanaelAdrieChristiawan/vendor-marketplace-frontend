@@ -60,7 +60,9 @@ function handleLogin() {
             </div>
           </div>
 
-          <p v-if="loginMutation.isError.value" class="auth-error">Email atau password salah.</p>
+          <p v-if="loginMutation.isError.value" class="auth-error">
+            {{ (loginMutation.error.value as any)?.response?.data?.message || 'Email atau password salah.' }}
+          </p>
 
           <button
             type="submit"

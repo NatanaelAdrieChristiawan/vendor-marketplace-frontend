@@ -1,19 +1,30 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
+const { user, logout } = useAuth()
 const activeTab = ref<'log' | 'pengaturan'>('log')
 
-const adminInfo = {
-  name: 'Admin Finance',
-  id: '#FIN-1234',
-  statusBadge: 'AKTIF',
-  role: 'Finance Administrator',
-  department: 'Finance & Accounting',
-  email: 'finance@vendormarketplace.com',
-  tanggalBergabung: '10 Januari 2024',
-}
+const adminInfo = computed(() => {
+  const u = (user.value || {}) as any
+  const joinedDate = u.createdAt ? new Date(u.createdAt).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }) : '10 Januari 2024'
+
+  return {
+    name: u.fullName || 'Admin Finance',
+    id: u.id ? `#FIN-${u.id}` : '#FIN-1234',
+    statusBadge: u.isSuspended ? 'DITANGGUHKAN' : 'AKTIF',
+    role: u.role === 'ADMIN_FINANCE' ? 'Finance Administrator' : u.role || 'Finance Administrator',
+    department: 'Finance & Accounting',
+    email: u.email || 'finance@vendormarketplace.com',
+    tanggalBergabung: joinedDate
+  }
+})
 
 const logAktivitas = [
   {
@@ -43,8 +54,7 @@ const logAktivitas = [
 ]
 
 const handleLogout = () => {
-  localStorage.removeItem('userRole')
-  router.push('/admin/login')
+  logout()
 }
 
 const goBack = () => {

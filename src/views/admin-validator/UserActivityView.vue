@@ -16,7 +16,8 @@ const user = computed(() => userQuery.data.value)
 const chatLogs = computed(() => chatLogsQuery.data.value || [])
 
 function goBack() {
-  router.push('/admin-validator/user-moderation')
+  const parentPath = route.path.split('/user-moderation')[0]
+  router.push(`${parentPath}/user-moderation`)
 }
 </script>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useMyGigs } from '../../composables/useGigs'
+import { useMyGigs, useReviews } from '../../composables/useGigs'
 import { useAuthStore } from '../../store/auth.store'
 import api from '../../api/axios'
 
@@ -17,7 +17,8 @@ const gig = computed(() => {
   return myGigs.value.find((g: any) => String(g.id) === String(gigId))
 })
 
-const reviews = ref<any[]>([])
+const { data: reviewsData } = useReviews(gigId)
+const reviews = computed(() => reviewsData.value || [])
 
 const title = computed(() => gig.value?.title || 'Memuat...')
 

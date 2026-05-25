@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUsers } from '../../composables/useUsers'
-import { useMerchants } from '../../composables/useMerchants'
 import { useAdmin } from '../../composables/useAdmin'
+import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
 const { data: rawUsers, isLoading } = useUsers()
-const { data: rawMerchants } = useMerchants()
-const { suspendMerchantMutation } = useAdmin()
+const { suspendUserMutation } = useAdmin()
+const { user: currentAuthUser } = useAuth()
+
+const isSuperAdmin = computed(() => {
+  const role = currentAuthUser.value?.role?.toUpperCase()
+  return role === 'SUPER_ADMIN' || role === 'SUPERADMIN'
+})
 
 const searchQuery = ref('')
 const statusFilter = ref('all')
+const actionLoading = ref(false)
+const errorMessage = ref('')
 
 const users = computed(() => {
   if (!rawUsers.value) return []
@@ -33,19 +40,54 @@ const filteredUsers = computed(() => {
   })
 })
 
+// ── Pagination ──────────────────────────────────────────
+const currentPage = ref(1)
+const itemsPerPage = 10
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredUsers.value.length / itemsPerPage)))
+
+const paginatedUsers = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  return filteredUsers.value.slice(start, start + itemsPerPage)
+})
+
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  const current = currentPage.value
+  const pages: (number | string)[] = []
+
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (current > 3) pages.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (current < total - 2) pages.push('...')
+    pages.push(total)
+  }
+  return pages
+})
+
+function goToPage(page: number | string) {
+  if (typeof page === 'number' && page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+// Reset to page 1 when filters change
+watch([searchQuery, statusFilter], () => { currentPage.value = 1 })
+
+// ── Detail / Suspend ────────────────────────────────────
 const showDetailModal = ref(false)
 const showSuspendConfirmModal = ref(false)
 const selectedUser = ref<any>(null)
 const selectedDuration = ref('3')
 const suspendNote = ref('')
 
-const selectedMerchant = computed(() => {
-  if (!selectedUser.value || !rawMerchants.value) return null
-  return rawMerchants.value.find((m: any) => m.userId === selectedUser.value.id) || null
-})
-
 function openDetail(user: any) {
-  selectedUser.value = user
+  selectedUser.value = { ...user }
   showDetailModal.value = true
 }
 
@@ -56,7 +98,8 @@ function closeDetail() {
 
 function goToActivity() {
   if (selectedUser.value) {
-    router.push(`/admin-validator/user-moderation/${selectedUser.value.id}/activity`)
+    const parentPath = router.currentRoute.value.path.split('/user-moderation')[0]
+    router.push(`${parentPath}/user-moderation/${selectedUser.value.id}/activity`)
   }
 }
 
@@ -70,27 +113,44 @@ function closeSuspendConfirm() {
 }
 
 async function submitSuspend() {
-  if (selectedUser.value && selectedMerchant.value) {
-    await suspendMerchantMutation.mutateAsync({
-      id: selectedMerchant.value.id,
+  if (!selectedUser.value) return
+  actionLoading.value = true
+  try {
+    await suspendUserMutation.mutateAsync({
+      id: selectedUser.value.id,
       isSuspended: true,
       reason: suspendNote.value,
       days: selectedDuration.value === 'permanent' ? 0 : Number(selectedDuration.value)
     })
+  } finally {
+    actionLoading.value = false
   }
   closeSuspendConfirm()
   closeDetail()
 }
 
 async function submitUnsuspend() {
-  if (selectedUser.value && selectedMerchant.value) {
-    await suspendMerchantMutation.mutateAsync({
-      id: selectedMerchant.value.id,
+  if (!selectedUser.value) return
+  if (!isSuperAdmin.value) {
+    errorMessage.value = 'Hanya Super Admin yang dapat mencabut suspend akun.'
+    setTimeout(() => { errorMessage.value = '' }, 4000)
+    return
+  }
+  actionLoading.value = true
+  try {
+    await suspendUserMutation.mutateAsync({
+      id: selectedUser.value.id,
       isSuspended: false,
       reason: 'Pencabutan suspend oleh admin'
     })
+    selectedUser.value = { ...selectedUser.value, status: 'Active' }
+    closeDetail()
+  } catch (err: any) {
+    errorMessage.value = err?.response?.data?.message || 'Gagal mencabut suspend.'
+    setTimeout(() => { errorMessage.value = '' }, 4000)
+  } finally {
+    actionLoading.value = false
   }
-  closeDetail()
 }
 </script>
 
@@ -119,7 +179,6 @@ async function submitUnsuspend() {
           <option value="Active">Active</option>
           <option value="Suspend">Suspend</option>
         </select>
-        <!-- Custom arrow for select -->
         <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
         </div>
@@ -130,7 +189,7 @@ async function submitUnsuspend() {
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div class="p-6 border-b border-gray-100 flex items-center gap-3">
         <h2 class="text-lg font-bold text-gray-800">Total User</h2>
-        <span class="px-3 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">{{ users.length }} users</span>
+        <span class="px-3 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">{{ filteredUsers.length }} users</span>
       </div>
       
       <div class="overflow-x-auto">
@@ -155,10 +214,10 @@ async function submitUnsuspend() {
                 <td class="px-6 py-4 text-right"><div class="h-8 w-8 bg-gray-200 rounded-lg ml-auto"></div></td>
               </tr>
             </template>
-            <tr v-else-if="filteredUsers.length === 0">
+            <tr v-else-if="paginatedUsers.length === 0">
               <td colspan="4" class="px-6 py-12 text-center text-gray-500 font-medium">Data user tidak ditemukan</td>
             </tr>
-            <tr v-else v-for="user in filteredUsers" :key="user.id" class="hover:bg-gray-50/50 transition-colors group">
+            <tr v-else v-for="user in paginatedUsers" :key="user.id" class="hover:bg-gray-50/50 transition-colors group">
               <td class="px-6 py-4">
                 <div class="font-bold text-gray-900 group-hover:text-[#1E3A8A] transition-colors">{{ user.name }}</div>
                 <div class="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wider font-semibold">ID: #{{ user.id }}</div>
@@ -181,21 +240,34 @@ async function submitUnsuspend() {
       </div>
       
       <!-- Pagination -->
-      <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
+      <div v-if="totalPages > 1" class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+        <button 
+          @click="goToPage(currentPage - 1)" 
+          :disabled="currentPage === 1"
+          class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
           Previous
         </button>
         <div class="hidden sm:flex items-center gap-1">
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-800 font-bold text-sm">1</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">2</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">3</button>
-          <span class="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">8</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">9</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">10</button>
+          <template v-for="(page, idx) in visiblePages" :key="idx">
+            <span v-if="page === '...'" class="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">…</span>
+            <button 
+              v-else
+              @click="goToPage(page)"
+              class="w-8 h-8 flex items-center justify-center rounded-lg text-sm transition-colors"
+              :class="page === currentPage ? 'bg-[#1E3A8A] text-white font-bold shadow-sm' : 'text-gray-500 hover:bg-gray-50 font-medium'"
+            >
+              {{ page }}
+            </button>
+          </template>
         </div>
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
+        <span class="sm:hidden text-sm text-gray-500 font-medium">{{ currentPage }} / {{ totalPages }}</span>
+        <button 
+          @click="goToPage(currentPage + 1)" 
+          :disabled="currentPage === totalPages"
+          class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           Next
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
         </button>
@@ -204,13 +276,10 @@ async function submitUnsuspend() {
 
     <!-- Detail Drawer Overlay -->
     <div v-if="showDetailModal" class="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-[2px] animate-fade-in">
-      <!-- Click outside to close -->
       <div class="absolute inset-0" @click="closeDetail"></div>
       
-      <!-- Main Drawer Content -->
       <div class="bg-white w-full max-w-[400px] h-full shadow-2xl relative z-10 flex flex-col items-center p-8 space-y-6 animate-slide-in-right overflow-y-auto">
         
-        <!-- Profile Card inside Drawer -->
         <div class="w-full flex flex-col items-center p-6 border border-gray-100 rounded-[20px] bg-white shadow-sm mt-4">
           <img :src="selectedUser?.avatar" alt="Avatar" class="w-20 h-20 rounded-full object-cover mb-4 border-2 border-gray-50" />
           <h3 class="text-lg font-extrabold text-gray-900">{{ selectedUser?.name }}</h3>
@@ -254,11 +323,29 @@ async function submitUnsuspend() {
           </button>
         </div>
 
-        <button v-if="selectedUser?.status === 'Active'" @click="openSuspendConfirm" class="w-full bg-[#E53E3E] hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl transition-colors text-sm uppercase tracking-wide shadow-sm mt-auto">
+        <button 
+          v-if="selectedUser?.status === 'Active'" 
+          @click="openSuspendConfirm" 
+          class="w-full bg-[#E53E3E] hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl transition-colors text-sm uppercase tracking-wide shadow-sm mt-auto"
+        >
           Suspend Akun
         </button>
-        <button v-else @click="submitUnsuspend" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 px-4 rounded-xl transition-colors text-sm uppercase tracking-wide shadow-sm mt-auto">
-          Cabut Suspend
+        <!-- Error Message -->
+        <div v-if="errorMessage" class="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium text-center">
+          {{ errorMessage }}
+        </div>
+
+        <button 
+          v-else 
+          @click="submitUnsuspend" 
+          :disabled="actionLoading || !isSuperAdmin"
+          class="w-full font-bold py-3.5 px-4 rounded-xl transition-colors text-sm uppercase tracking-wide shadow-sm mt-auto disabled:cursor-not-allowed"
+          :class="isSuperAdmin ? 'bg-green-600 hover:bg-green-700 text-white disabled:opacity-60' : 'bg-gray-300 text-gray-500 cursor-not-allowed'"
+          :title="!isSuperAdmin ? 'Hanya Super Admin yang dapat mencabut suspend' : ''"
+        >
+          <span v-if="actionLoading">Memproses...</span>
+          <span v-else-if="!isSuperAdmin">Hanya Super Admin</span>
+          <span v-else>Cabut Suspend</span>
         </button>
       </div>
     </div>
@@ -283,8 +370,13 @@ async function submitUnsuspend() {
           ></textarea>
           
           <div class="flex justify-end mt-8">
-            <button @click="submitSuspend" class="bg-[#DF4A4A] hover:bg-red-700 text-white font-bold py-3 px-10 rounded-[12px] transition-colors text-base shadow-sm">
-              Tolak
+            <button 
+              @click="submitSuspend" 
+              :disabled="actionLoading"
+              class="bg-[#DF4A4A] hover:bg-red-700 text-white font-bold py-3 px-10 rounded-[12px] transition-colors text-base shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <span v-if="actionLoading">Memproses...</span>
+              <span v-else>Suspend</span>
             </button>
           </div>
         </div>
