@@ -12,6 +12,14 @@ export function useTransactions() {
     }
   })
 
+  const myTransactionsQuery = useQuery({
+    queryKey: ['transactions', 'my-history'],
+    queryFn: async () => {
+      const { data } = await api.get('/transactions/my-history')
+      return data
+    }
+  })
+
   const verifyTransactionMutation = useMutation({
     mutationFn: async ({ id, status, verificationNote }: { id: number; status: 'VERIFIED' | 'REJECTED'; verificationNote?: string }) => {
       const { data } = await api.patch(`/transactions/${id}/verify`, { status, verificationNote })
@@ -19,11 +27,13 @@ export function useTransactions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions', 'all'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'my-history'] })
     }
   })
 
   return {
     allTransactionsQuery,
+    myTransactionsQuery,
     verifyTransactionMutation
   }
 }

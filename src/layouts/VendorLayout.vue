@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth.store'
 
@@ -20,6 +20,18 @@ const toggleTransaksi = () => {
   isTransaksiOpen.value = !isTransaksiOpen.value
 }
 
+onMounted(() => {
+  if (route.path.includes('/vendor/finance')) {
+    isTransaksiOpen.value = true
+  }
+})
+
+watch(() => route.path, (newPath) => {
+  if (newPath.includes('/vendor/finance')) {
+    isTransaksiOpen.value = true
+  }
+})
+
 const menuItems = computed(() => {
   const items = [
     {
@@ -28,7 +40,7 @@ const menuItems = computed(() => {
       icon: 'home',
     },
     {
-      name: 'Profil Toko',
+      name: 'Toko Saya',
       path: '/vendor/my-store',
       icon: 'store',
     },
@@ -57,6 +69,7 @@ const menuItems = computed(() => {
       path: '/vendor/finance',
       icon: 'wallet',
       children: [
+        { name: 'Keuangan', path: '/vendor/finance' },
         { name: 'Riwayat transaksi', path: '/vendor/finance/history' },
       ],
     },

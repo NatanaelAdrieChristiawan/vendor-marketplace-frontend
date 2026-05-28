@@ -29,6 +29,7 @@ export function useWithdrawals() {
       queryClient.invalidateQueries({ queryKey: ['withdrawals', 'my'] })
       queryClient.invalidateQueries({ queryKey: ['merchantProfile'] })
       queryClient.invalidateQueries({ queryKey: ['profile'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'my-history'] })
     }
   })
 
