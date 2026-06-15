@@ -97,14 +97,11 @@ const hasSystemIssue = computed(() => {
 
 // ─── Display helpers for global metrics (merge real + overview) ──
 const displayTotalUsers = computed(() => {
-  // Priority: real BE data (users list), fallback overview mock
-  if (totalUsersCount.value > 0) return formatCompactNumber(totalUsersCount.value)
-  return formatCompactNumber(globalMetrics.value?.totalUsers || 0)
+  return formatCompactNumber(totalUsersCount.value || globalMetrics.value?.totalUsers || 0)
 })
 
 const displayActiveUsers = computed(() => {
-  if (activeUsersCount.value > 0) return formatCompactNumber(activeUsersCount.value)
-  return formatCompactNumber(globalMetrics.value?.activeUsers || 0)
+  return formatCompactNumber(activeUsersCount.value || globalMetrics.value?.activeUsers || 0)
 })
 
 const displayNewUsersToday = computed(() => {
@@ -116,13 +113,11 @@ const displayUserGrowth = computed(() => {
 })
 
 const displayRevenueMonthly = computed(() => {
-  if (platformRevenue.value > 0) return formatCompactCurrency(platformRevenue.value)
-  return formatCompactCurrency(globalMetrics.value?.revenueToday || 0)
+  return formatCompactCurrency(platformRevenue.value || globalMetrics.value?.revenueToday || 0)
 })
 
 const displayGmv = computed(() => {
-  if (gmvRevenue.value > 0) return formatCompactCurrency(gmvRevenue.value)
-  return 'Rp 52.4 M'
+  return formatCompactCurrency(gmvRevenue.value)
 })
 
 const displayRevenueToday = computed(() => {
@@ -130,13 +125,11 @@ const displayRevenueToday = computed(() => {
 })
 
 const displayRevenueGrowth = computed(() => {
-  return '↑ 18.7%'
+  return '↑ 0%'
 })
 
 const displayTotalTransactions = computed(() => {
-  // Priority: real BE data from analytics, fallback overview
-  if (totalTransactionsCount.value > 0) return totalTransactionsCount.value.toLocaleString('id-ID')
-  return (globalMetrics.value?.totalTransactions || 0).toLocaleString('id-ID')
+  return (totalTransactionsCount.value || globalMetrics.value?.totalTransactions || 0).toLocaleString('id-ID')
 })
 
 const displayTransactionGrowth = computed(() => {
@@ -147,10 +140,6 @@ const displayActiveSessions = computed(() => {
   return (globalMetrics.value?.activeSessions || 0).toLocaleString('id-ID')
 })
 
-// ─── Determine if any data is from real BE ──────────────────────
-const hasRealUserData = computed(() => totalUsersCount.value > 0)
-const hasRealAnalytics = computed(() => !!analytics.value?.revenue)
-const isUsingMockData = computed(() => !hasRealUserData.value && !hasRealAnalytics.value)
 
 // formatPrice moved to composable as formatCompactCurrency
 
@@ -171,7 +160,7 @@ const refreshData = async () => {
 
 // ─── Chart Data ─────────────────────────────────────────────────
 const lineChartData = computed(() => {
-  const baseRevenue = analytics.value?.revenue?.platformRevenue || 4800000000
+  const baseRevenue = analytics.value?.revenue?.platformRevenue || 0
   return {
     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'],
     datasets: [
@@ -243,9 +232,9 @@ const lineChartOptions = {
 }
 
 const donutChartData = computed(() => {
-  const activePercent = totalUsersCount.value ? Math.round((activeUsersCount.value / totalUsersCount.value) * 100) : 72
-  const inactivePercent = totalUsersCount.value ? Math.round((suspendedUsersCount.value / totalUsersCount.value) * 100) : 20
-  const newPercent = 100 - activePercent - inactivePercent
+  const activePercent = totalUsersCount.value ? Math.round((activeUsersCount.value / totalUsersCount.value) * 100) : 0
+  const inactivePercent = totalUsersCount.value ? Math.round((suspendedUsersCount.value / totalUsersCount.value) * 100) : 0
+  const newPercent = totalUsersCount.value ? (100 - activePercent - inactivePercent) : 0
 
   return {
     labels: ['User Aktif', 'Tidak Aktif', 'Baru Daftar'],
@@ -369,24 +358,7 @@ const donutChartOptions = {
 
     <!-- 2. MAIN CONTENT STATE -->
     <div v-else class="space-y-10">
-      <!-- Empty state banner -->
-      <div 
-        v-if="isUsingMockData" 
-        class="bg-[#EFF6FF] border border-[#BFDBFE] text-[#1E40AF] p-5 rounded-[20px] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs"
-      >
-        <div class="flex items-start sm:items-center gap-3.5">
-          <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-lg shadow-xs">
-            📊
-          </div>
-          <div>
-            <h4 class="font-bold text-sm text-[#1E3A8A]">Database Marketplace Kosong</h4>
-            <p class="text-xs text-[#2563EB] mt-0.5 font-medium">Belum ada pengguna terdaftar atau riwayat transaksi di database backend. Menampilkan data mockup visual default.</p>
-          </div>
-        </div>
-        <div class="text-xs font-semibold px-3 py-1.5 bg-[#DBEAFE] rounded-xl self-start sm:self-center border border-[#BFDBFE]/60 text-[#1E40AF]">
-          Visual Default Aktif
-        </div>
-      </div>
+
 
       <!-- Health Check Sistem -->
       <section>
@@ -887,8 +859,8 @@ const donutChartOptions = {
                 <span class="w-2.5 h-2.5 rounded-full bg-[#3B82F6]"></span> User Aktif
               </div>
               <div class="text-gray-400">
-                {{ hasRealUserData ? activeUsersCount.toLocaleString('id-ID') : '892K' }} 
-                <span class="font-bold text-gray-700 ml-1">({{ totalUsersCount ? Math.round((activeUsersCount / totalUsersCount) * 100) : 72 }}%)</span>
+                {{ activeUsersCount.toLocaleString('id-ID') }} 
+                <span class="font-bold text-gray-700 ml-1">({{ totalUsersCount ? Math.round((activeUsersCount / totalUsersCount) * 100) : 0 }}%)</span>
               </div>
             </div>
             <div class="flex justify-between items-center">
@@ -896,8 +868,8 @@ const donutChartOptions = {
                 <span class="w-2.5 h-2.5 rounded-full bg-[#60A5FA]"></span> Tidak Aktif
               </div>
               <div class="text-gray-400">
-                {{ hasRealUserData ? suspendedUsersCount.toLocaleString('id-ID') : '248K' }} 
-                <span class="font-bold text-gray-700 ml-1">({{ totalUsersCount ? Math.round((suspendedUsersCount / totalUsersCount) * 100) : 20 }}%)</span>
+                {{ suspendedUsersCount.toLocaleString('id-ID') }} 
+                <span class="font-bold text-gray-700 ml-1">({{ totalUsersCount ? Math.round((suspendedUsersCount / totalUsersCount) * 100) : 0 }}%)</span>
               </div>
             </div>
             <div class="flex justify-between items-center">
@@ -905,8 +877,8 @@ const donutChartOptions = {
                 <span class="w-2.5 h-2.5 rounded-full bg-[#CBD5E1]"></span> Baru Daftar
               </div>
               <div class="text-gray-400">
-                {{ hasRealUserData ? (totalUsersCount - activeUsersCount - suspendedUsersCount).toLocaleString('id-ID') : '100K' }} 
-                <span class="font-bold text-gray-700 ml-1">({{ totalUsersCount ? (100 - Math.round((activeUsersCount / totalUsersCount) * 100) - Math.round((suspendedUsersCount / totalUsersCount) * 100)) : 8 }}%)</span>
+                {{ (totalUsersCount - activeUsersCount - suspendedUsersCount).toLocaleString('id-ID') }} 
+                <span class="font-bold text-gray-700 ml-1">({{ totalUsersCount ? (100 - Math.round((activeUsersCount / totalUsersCount) * 100) - Math.round((suspendedUsersCount / totalUsersCount) * 100)) : 0 }}%)</span>
               </div>
             </div>
           </div>

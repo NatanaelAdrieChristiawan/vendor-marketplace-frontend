@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useAdminUsers, useCreateAdmin, useSuspendAdmin, useUnsuspendAdmin, useDeleteAdmin } from '../../composables/useAdminAnalytics'
-import { useSystemConfig } from '../../composables/useSystemConfig'
+import { useSystemAuditLogs } from '../../composables/useSystemConfig'
+
+const currentView = ref('list')
+const selectedAdmin = ref<any>(null)
 
 const { data: rawUsers, isLoading } = useAdminUsers()
-const { auditLogsQuery } = useSystemConfig()
+const auditLogsQuery = useSystemAuditLogs({
+  enabled: computed(() => currentView.value === 'detail' && !!selectedAdmin.value)
+})
 
 const showAddModal = ref(false)
 const searchQuery = ref('')
@@ -16,9 +21,6 @@ const newAdmin = ref({
   email: '',
   role: 'Validator',
 })
-
-const currentView = ref('list')
-const selectedAdmin = ref<any>(null)
 const showDeleteModal = ref(false)
 
 const adminLogs = computed(() => {

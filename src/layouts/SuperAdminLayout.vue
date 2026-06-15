@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 
 const route = useRoute()
+const { user } = useAuth()
 const sidebarCollapsed = ref(false)
 
 const menuItems = [
@@ -96,9 +98,9 @@ function toggleSidebar() {
           class="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center shadow-md bg-white border border-gray-100 hover:shadow-lg transition-shadow"
           :class="!sidebarCollapsed && 'px-4 w-full justify-start gap-4 rounded-xl'"
         >
-          <img src="https://i.pravatar.cc/150?img=11" alt="User Profile" class="w-full h-full object-cover" v-if="sidebarCollapsed" />
-          <img src="https://i.pravatar.cc/150?img=11" alt="User Profile" class="w-8 h-8 rounded-full object-cover" v-if="!sidebarCollapsed" />
-          <span v-if="!sidebarCollapsed" class="font-semibold text-sm">Super Admin</span>
+          <img :src="user?.avatarUrl || `https://ui-avatars.com/api/?name=${user?.fullName || 'SA'}&background=1E3A8A&color=fff`" alt="User Profile" class="w-full h-full object-cover" v-if="sidebarCollapsed" />
+          <img :src="user?.avatarUrl || `https://ui-avatars.com/api/?name=${user?.fullName || 'SA'}&background=1E3A8A&color=fff`" alt="User Profile" class="w-8 h-8 rounded-full object-cover" v-if="!sidebarCollapsed" />
+          <span v-if="!sidebarCollapsed" class="font-semibold text-sm">{{ user?.fullName || 'Super Admin' }}</span>
         </router-link>
         <button class="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-800 transition-colors" @click="toggleSidebar">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

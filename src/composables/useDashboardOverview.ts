@@ -78,59 +78,51 @@ export interface DashboardOverview {
 // ─── Fallback Mock Data (dipakai saat BE belum siap) ───────────
 const FALLBACK_DATA: DashboardOverview = {
   serverHealth: {
-    cpuUsage: 34,
-    memoryUsage: 58,
-    uptime: 99.98
+    cpuUsage: 0,
+    memoryUsage: 0,
+    uptime: 100
   },
   paymentGateways: [
-    { name: 'Midtrans', status: 'active', latency: 142 },
-    { name: 'Xendit', status: 'active', latency: 98 },
-    { name: 'DOKU', status: 'slow', latency: 320 }
+    { name: 'Midtrans', status: 'offline', latency: 0 },
+    { name: 'Xendit', status: 'offline', latency: 0 },
+    { name: 'DOKU', status: 'offline', latency: 0 }
   ],
   database: {
-    storagePercent: 71,
-    connectionsUsed: 247,
-    connectionsMax: 500,
-    avgQueryMs: 8
+    storagePercent: 0,
+    connectionsUsed: 0,
+    connectionsMax: 100,
+    avgQueryMs: 0
   },
   notifications: {
-    pushNotif: 'active',
-    emailSmtp: 'error',
-    whatsappApi: 'active'
+    pushNotif: 'offline',
+    emailSmtp: 'offline',
+    whatsappApi: 'offline'
   },
   teamPerformance: {
     adminValidator: {
-      totalTicketsToday: 24,
+      totalTicketsToday: 0,
       dailyTarget: 300,
-      progressPercent: 82,
-      members: [
-        { name: 'Siti Rahayu', ticketCount: 9, progressPercent: 60 },
-        { name: 'Andi Pratama', ticketCount: 6, progressPercent: 40 },
-        { name: 'Maya Dewi', ticketCount: 2, progressPercent: 15 }
-      ],
-      summary: { completed: 24, pending: 3, rejected: 5 }
+      progressPercent: 0,
+      members: [],
+      summary: { completed: 0, pending: 0, rejected: 0 }
     },
     financeAdmin: {
-      totalDisbursementsToday: 18,
+      totalDisbursementsToday: 0,
       dailyTarget: 200,
-      progressPercent: 91,
-      members: [
-        { name: 'Reza Firmansyah', amount: 4000000, progressPercent: 45 },
-        { name: 'Lina Kusuma', amount: 8000000, progressPercent: 80 },
-        { name: 'Doni Setiawan', amount: 7000000, progressPercent: 70 }
-      ],
-      summary: { totalDisbursed: 32000000, queued: 1, failed: 3 }
+      progressPercent: 0,
+      members: [],
+      summary: { totalDisbursed: 0, queued: 0, failed: 0 }
     }
   },
   globalMetrics: {
-    totalUsers: 1240000,
-    activeUsers: 892000,
-    newUsersToday: 8200,
-    userGrowthPercent: 12.4,
-    revenueToday: 327000000,
-    totalTransactions: 201,
-    transactionGrowthPercent: 9.3,
-    activeSessions: 12847
+    totalUsers: 0,
+    activeUsers: 0,
+    newUsersToday: 0,
+    userGrowthPercent: 0,
+    revenueToday: 0,
+    totalTransactions: 0,
+    transactionGrowthPercent: 0,
+    activeSessions: 0
   }
 }
 
