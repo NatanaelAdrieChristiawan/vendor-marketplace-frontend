@@ -260,6 +260,25 @@ export function useAuth() {
     }
   })
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (payload: { fullName?: string; avatarUrl?: string }) => {
+      const response = await api.patch('/auth/profile', payload)
+      return response.data
+    },
+    onSuccess: (res) => {
+      const updatedUser = res.data || res
+      if (updatedUser) {
+        const mappedUser = {
+          ...updatedUser,
+          id: String(updatedUser.id || updatedUser.sub),
+          name: updatedUser.fullName || updatedUser.name || 'User'
+        }
+        authStore.setAuth(mappedUser, authStore.token!)
+      }
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
+    }
+  })
+
   const uploadFile = async (file: File, bucket?: string) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -285,6 +304,7 @@ export function useAuth() {
     registerVendorMutation,
     submitKybMutation,
     registerMerchantMutation,
-    uploadFile
+    uploadFile,
+    updateProfileMutation
   }
 }
