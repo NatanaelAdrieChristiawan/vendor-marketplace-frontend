@@ -5,13 +5,11 @@ import { useAdmin } from '../../composables/useAdmin'
 
 const router = useRouter()
 const route = useRoute()
-const { pendingMerchantsQuery, verifyMerchantMutation } = useAdmin()
+const { getMerchantByIdQuery, verifyMerchantMutation } = useAdmin()
 
 const merchantId = Number(route.params.id)
 
-const merchant = computed(() => {
-  return pendingMerchantsQuery.data.value?.find((v: any) => v.id === merchantId)
-})
+const { data: merchant, isLoading, isError } = getMerchantByIdQuery(merchantId)
 
 const parsedKyb = computed(() => {
   if (!merchant.value?.kybDocuments) return null
@@ -61,7 +59,24 @@ async function submitApprove() {
 </script>
 
 <template>
-  <div v-if="merchant" class="space-y-6 animate-fade-in w-full pb-20 max-w-[900px] mx-auto">
+  <!-- Loading state -->
+  <div v-if="isLoading" class="p-20 text-center text-gray-500 animate-pulse">
+    <div class="w-12 h-12 rounded-full border-4 border-blue-200 border-t-[#1E3A8A] animate-spin mx-auto mb-4"></div>
+    <p class="text-sm font-medium">Memuat data toko...</p>
+  </div>
+
+  <!-- Error state -->
+  <div v-else-if="isError" class="p-20 text-center">
+    <div class="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+      <svg class="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+    </div>
+    <p class="text-sm font-bold text-gray-700 mb-1">Toko tidak ditemukan</p>
+    <p class="text-xs text-gray-400 mb-4">Data vendor tidak dapat dimuat.</p>
+    <button @click="goBack" class="text-sm font-bold text-[#1E3A8A] hover:underline">← Kembali ke daftar</button>
+  </div>
+
+  <!-- Main content -->
+  <div v-else-if="merchant" class="space-y-6 animate-fade-in w-full pb-20 max-w-[900px] mx-auto">
     <!-- Header with Back Button -->
     <div class="flex items-center gap-4">
       <button @click="goBack" class="p-2 -ml-2 rounded-xl hover:bg-gray-100 text-gray-800 transition-colors">
@@ -82,8 +97,17 @@ async function submitApprove() {
           <p class="text-sm text-gray-500">{{ merchant.user?.email }}</p>
         </div>
       </div>
-      <div class="px-4 py-1.5 bg-orange-50 text-orange-600 rounded-full text-xs font-bold border border-orange-100">
-        Menunggu Verifikasi
+      <!-- Dynamic status badge -->
+      <div
+        class="px-4 py-1.5 rounded-full text-xs font-bold border"
+        :class="{
+          'bg-orange-50 text-orange-600 border-orange-100': merchant.status === 'PENDING_VERIFICATION',
+          'bg-green-50 text-green-600 border-green-100': merchant.status === 'ACTIVE',
+          'bg-red-50 text-red-600 border-red-100': merchant.status === 'REJECTED',
+          'bg-gray-50 text-gray-600 border-gray-200': !['PENDING_VERIFICATION','ACTIVE','REJECTED'].includes(merchant.status),
+        }"
+      >
+        {{ merchant.status === 'PENDING_VERIFICATION' ? 'Menunggu Verifikasi' : merchant.status === 'ACTIVE' ? 'Disetujui' : merchant.status === 'REJECTED' ? 'Ditolak' : merchant.status }}
       </div>
     </div>
 
@@ -150,8 +174,8 @@ async function submitApprove() {
       </div>
     </div>
 
-    <!-- Bottom Actions -->
-    <div class="flex flex-col items-end gap-3 mt-8 pt-4">
+    <!-- Bottom Actions — only shown for PENDING_VERIFICATION -->
+    <div v-if="merchant.status === 'PENDING_VERIFICATION'" class="flex flex-col items-end gap-3 mt-8 pt-4">
       <button 
         @click="submitApprove" 
         :disabled="verifyMerchantMutation.isPending.value"
@@ -166,6 +190,14 @@ async function submitApprove() {
       >
         Tolak Pengajuan
       </button>
+    </div>
+
+    <!-- Info banner for non-pending merchants -->
+    <div v-else class="mt-8 pt-4 flex justify-end">
+      <div class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-500 font-medium">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Vendor ini sudah diproses — tidak ada aksi yang tersedia
+      </div>
     </div>
 
     <!-- Reject Modal -->
@@ -191,7 +223,7 @@ async function submitApprove() {
           <div class="flex justify-end mt-8">
             <button 
               @click="submitReject" 
-              :disabled="verifyMerchantMutation.isPending.value"
+              :disabled="verifyMerchantMutation.isPending.value || !rejectReason"
               class="bg-[#DF4A4A] hover:bg-red-700 disabled:opacity-50 text-white font-bold py-3 px-10 rounded-[12px] transition-colors text-base shadow-sm"
             >
               {{ verifyMerchantMutation.isPending.value ? 'Memproses...' : 'Tolak' }}
@@ -200,9 +232,6 @@ async function submitApprove() {
         </div>
       </div>
     </div>
-  </div>
-  <div v-else class="p-20 text-center text-gray-500 animate-fade-in">
-    Memuat data toko...
   </div>
 </template>
 

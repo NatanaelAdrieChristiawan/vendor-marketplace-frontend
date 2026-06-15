@@ -1,24 +1,55 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAdmin } from '../../composables/useAdmin'
 
 const router = useRouter()
-const { pendingMerchantsQuery } = useAdmin()
+const { merchantsQuery } = useAdmin()
 
 const tabs = ['All', 'Disetujui', 'Menunggu', 'Ditolak']
 const activeTab = ref('Menunggu')
 
-const vendors = computed(() => {
-  const data = pendingMerchantsQuery.data.value || []
-  return data.map((v: any) => ({
-    id: v.id,
-    name: v.shopName,
-    status: 'Menunggu', // Since the endpoint only returns pending ones
-    type: 'Creative Services',
-    email: v.user?.email || 'N/A'
-  }))
+const page = ref(1)
+const limit = ref(10)
+
+const tabToStatus: Record<string, string> = {
+  'All': 'ALL',
+  'Disetujui': 'ACTIVE',
+  'Menunggu': 'PENDING_VERIFICATION',
+  'Ditolak': 'REJECTED'
+}
+
+watch(activeTab, () => {
+  page.value = 1
 })
+
+const queryParams = computed(() => ({
+  status: tabToStatus[activeTab.value],
+  page: page.value,
+  limit: limit.value
+}))
+
+const { data: merchantsData, isLoading } = merchantsQuery(queryParams)
+
+const vendors = computed(() => {
+  const list = merchantsData.value?.data || []
+  return list.map((v: any) => {
+    let friendlyStatus = 'Menunggu'
+    if (v.status === 'ACTIVE') friendlyStatus = 'Disetujui'
+    if (v.status === 'REJECTED') friendlyStatus = 'Ditolak'
+    
+    return {
+      id: v.id,
+      name: v.shopName,
+      status: friendlyStatus,
+      type: 'Creative Services',
+      email: v.user?.email || 'N/A'
+    }
+  })
+})
+
+const totalVendors = computed(() => merchantsData.value?.meta?.total || 0)
+const lastPage = computed(() => merchantsData.value?.meta?.lastPage || 1)
 
 function goToDetail(id: number) {
   router.push(`/admin-validator/vendor-verification/${id}`)
@@ -49,7 +80,7 @@ function goToDetail(id: number) {
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-6">
       <div class="p-6 border-b border-gray-100 flex items-center gap-3">
         <h2 class="text-lg font-bold text-gray-800">Daftar Vendor</h2>
-        <span class="px-3 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">6 vendors</span>
+        <span class="px-3 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">{{ totalVendors }} vendors</span>
       </div>
       
       <div class="overflow-x-auto">
@@ -72,7 +103,13 @@ function goToDetail(id: number) {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 bg-white">
-            <tr v-for="vendor in vendors" :key="vendor.id" class="hover:bg-gray-50/50 transition-colors">
+            <tr v-if="isLoading">
+              <td colspan="5" class="px-6 py-10 text-center text-gray-400 italic">Memuat data vendor...</td>
+            </tr>
+            <tr v-else-if="vendors.length === 0">
+              <td colspan="5" class="px-6 py-10 text-center text-gray-400 italic">Tidak ada antrean verifikasi vendor</td>
+            </tr>
+            <tr v-else v-for="vendor in vendors" :key="vendor.id" class="hover:bg-gray-50/50 transition-colors">
               <td class="px-6 py-5">
                 <div class="font-bold text-gray-900">{{ vendor.name }}</div>
               </td>
@@ -100,20 +137,30 @@ function goToDetail(id: number) {
       
       <!-- Pagination -->
       <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white">
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
+        <button 
+          @click="page > 1 && page--"
+          :disabled="page === 1"
+          class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
           Previous
         </button>
         <div class="hidden sm:flex items-center gap-1">
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-800 font-bold text-sm">1</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">2</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">3</button>
-          <span class="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">8</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">9</button>
-          <button class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 font-medium text-sm transition-colors">10</button>
+          <button 
+            v-for="p in lastPage" 
+            :key="p"
+            @click="page = p"
+            class="w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm transition-colors"
+            :class="page === p ? 'bg-[#1E3A8A] text-white' : 'text-gray-500 hover:bg-gray-50'"
+          >
+            {{ p }}
+          </button>
         </div>
-        <button class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
+        <button 
+          @click="page < lastPage && page++"
+          :disabled="page === lastPage"
+          class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
           Next
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
         </button>

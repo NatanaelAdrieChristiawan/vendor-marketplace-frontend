@@ -12,13 +12,34 @@ export function useAdmin() {
     }
   })
 
+  const merchantsQuery = (params: any) => {
+    return useQuery({
+      queryKey: ['admin', 'merchants', params],
+      queryFn: async () => {
+        const response = await api.get('/admin/validator/merchants', { params })
+        return response.data
+      }
+    })
+  }
+
+  const getMerchantByIdQuery = (id: number | string) => {
+    return useQuery({
+      queryKey: ['admin', 'merchant', String(id)],
+      queryFn: async () => {
+        const response = await api.get(`/admin/validator/merchants/${id}`)
+        return response.data
+      },
+      enabled: !!id
+    })
+  }
+
   const verifyMerchantMutation = useMutation({
     mutationFn: async ({ id, isApproved, rejectionReason }: { id: number, isApproved: boolean, rejectionReason?: string }) => {
       const response = await api.patch(`/admin/validator/merchants/${id}/verify`, { isApproved, rejectionReason })
       return response.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'merchants', 'pending'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'merchants'] })
     }
   })
 
@@ -110,6 +131,8 @@ export function useAdmin() {
 
   return {
     pendingMerchantsQuery,
+    merchantsQuery,
+    getMerchantByIdQuery,
     verifyMerchantMutation,
     suspendMerchantMutation,
     suspendUserMutation,
