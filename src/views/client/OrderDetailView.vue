@@ -24,7 +24,7 @@ const order = computed(() => {
 })
 
 const status = computed(() => {
-  if (!order.value) return ''
+  if (!order.value || !order.value.status) return ''
   const s = order.value.status
   if (s === 'IN_PROGRESS' || s === 'IN_REVISION' || s === 'DISPUTE_IN_PROGRESS') {
     return 'in-progress'

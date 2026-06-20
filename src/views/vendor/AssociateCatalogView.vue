@@ -21,7 +21,7 @@ const mappedGigs = computed(() => {
     let hasNote = false
     let isDraft = false
 
-    if (g.status === 'PENDING') {
+    if (g.status === 'PENDING_APPROVAL') {
       statusLabel = 'MENUNGGU PERSETUJUAN'
       statusClass = 'bg-blue-50 text-blue-500'
       tabCategory = 'Menunggu'
@@ -47,10 +47,16 @@ const mappedGigs = computed(() => {
       tabCategory = 'Ditolak'
     }
 
+    let parsedDesc = g.description
+    try {
+      const parsed = JSON.parse(g.description)
+      parsedDesc = parsed.text || parsed.description || g.description
+    } catch (_) {}
+
     return {
       id: g.id,
       title: g.title,
-      description: g.description,
+      description: parsedDesc,
       price: 'Rp ' + Number(g.price).toLocaleString('id-ID'),
       status: statusLabel,
       statusClass,
