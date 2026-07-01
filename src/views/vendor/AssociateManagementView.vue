@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAssociates } from '../../composables/useAssociates'
+import { useAuthStore } from '../../store/auth.store'
 
 const { associatesQuery, addAssociateMutation } = useAssociates()
+const authStore = useAuthStore()
 const isInviteModalOpen = ref(false)
+
+const isOwner = computed(() => authStore.currentUser?.role === 'MERCHANT_OWNER')
 
 const associates = computed(() => {
   return associatesQuery.data.value?.map((a: any) => ({
@@ -17,7 +21,7 @@ const associates = computed(() => {
 })
 
 const inviteEmail = ref('')
-const inviteRole = ref('CAN_MANAGE_ORDERS')
+const inviteRole = ref('MANAGE_ORDERS')
 
 function openModal() {
   isInviteModalOpen.value = true
@@ -26,7 +30,7 @@ function openModal() {
 function closeModal() {
   isInviteModalOpen.value = false
   inviteEmail.value = ''
-  inviteRole.value = 'CAN_MANAGE_ORDERS'
+  inviteRole.value = 'MANAGE_ORDERS'
 }
 
 async function sendInvite() {
@@ -36,8 +40,9 @@ async function sendInvite() {
       permission: inviteRole.value
     })
     closeModal()
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to add associate', err)
+    alert(err.response?.data?.message || 'Gagal menambahkan associate.')
   }
 }
 </script>
@@ -78,7 +83,7 @@ async function sendInvite() {
           Semua Status
           <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
         </button>
-        <button @click="openModal" class="px-5 py-2 bg-brand-light text-white text-sm font-bold rounded-xl hover:bg-brand-light/90 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap">
+        <button v-if="isOwner" @click="openModal" class="px-5 py-2 bg-brand-light text-white text-sm font-bold rounded-xl hover:bg-brand-light/90 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
           Undang Associate
         </button>
@@ -192,7 +197,10 @@ async function sendInvite() {
                     v-model="inviteRole"
                     class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-transparent"
                   >
-                    <option>Merchant Associate</option>
+                    <option value="VIEW_ONLY">Lihat Saja (Read-Only)</option>
+                    <option value="MANAGE_GIGS">Kelola Jasa (Gigs)</option>
+                    <option value="MANAGE_ORDERS">Kelola Pesanan (Orders)</option>
+                    <option value="FULL_ACCESS">Akses Penuh (Full Access)</option>
                   </select>
                   <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>

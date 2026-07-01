@@ -57,7 +57,7 @@ const selectedFilter = ref('Semua Status')
           </div>
           
           <router-link 
-            :to="`/vendor/associate/orders/${order.orderNo.replace('#', '')}`"
+            :to="`/vendor/associate/orders/${order.id}`"
             class="bg-[#1E3A8A] text-white px-10 py-3 rounded-xl text-sm font-bold hover:bg-[#0A1D56] transition-all shadow-lg shadow-[#1E3A8A]/20"
           >
             Proses
