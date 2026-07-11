@@ -89,7 +89,7 @@ const handleUpdatePin = async () => {
               {{ user?.name ? user.name.charAt(0).toUpperCase() : 'U' }}
             </div>
             <div>
-              <h3 class="text-xl font-bold text-gray-900">{{ user?.name }}</h3>
+              <h3 class="text-xl font-bold text-gray-900">{{ user?.fullName || user?.name }}</h3>
               <p class="text-sm text-gray-400 mt-0.5">{{ user?.email }}</p>
               <span class="inline-block mt-2 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full border border-blue-100">
                 {{ user?.role }}

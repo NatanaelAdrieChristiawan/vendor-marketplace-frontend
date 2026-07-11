@@ -7,9 +7,11 @@ import FileUpload from '../../components/ui/FileUpload.vue'
 import Button from '../../components/ui/Button.vue'
 import Input from '../../components/ui/Input.vue'
 import Toast from '../../components/ui/Toast.vue'
+import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
 const route = useRoute()
+const { uploadFile } = useAuth()
 const gigId = route.params.id as string
 
 const { data: myGigs, isLoading } = useMyGigs()
@@ -56,8 +58,26 @@ watch(gig, (newGig) => {
   }
 }, { immediate: true })
 
-async function handlePublish() {
+async function handlePublish(isDraft = false) {
   try {
+    for (const [key, tier] of Object.entries(tiers)) {
+      const priceNum = parseFloat(String(tier.price).replace(/[^0-9]/g, ''))
+      if (isNaN(priceNum) || priceNum <= 0) {
+        toastData.type = 'error'
+        toastData.title = 'Harga Tidak Valid'
+        toastData.subtitle = `Harga pada paket ${key} harus lebih dari 0.`
+        showToast.value = true
+        setTimeout(() => { showToast.value = false }, 3000)
+        return
+      }
+    }
+
+    let mainImageUrl = gig.value?.mediaUrls
+    if (mediaFile.value) {
+      const uploadRes = await uploadFile(mediaFile.value, 'merchant-assets')
+      mainImageUrl = uploadRes.url || uploadRes.data?.url
+    }
+
     const payload = {
       title: title.value,
       description: JSON.stringify({
@@ -68,27 +88,16 @@ async function handlePublish() {
           premium: { price: tiers.premium.price, features: tiers.premium.features }
         }
       }),
-      price: parseFloat(String(tiers.basic.price).replace(/[^0-9]/g, '')) || 0
+      price: parseFloat(String(tiers.basic.price).replace(/[^0-9]/g, '')) || 0,
+      mediaUrls: mainImageUrl,
+      status: isDraft ? 'DRAFT' : 'PENDING'
     }
 
-    const formData = new FormData()
-    formData.append('title', payload.title)
-    formData.append('description', payload.description)
-    formData.append('price', String(payload.price))
-    if (mediaFile.value) {
-      formData.append('media', mediaFile.value)
-    }
-
-    // Using api.patch with multipart/form-data for media upload
-    await api.patch(`/gigs/${gigId}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
+    await api.patch(`/gigs/${gigId}`, payload)
 
     toastData.type = 'success'
-    toastData.title = "Layanan Diperbarui!"
-    toastData.subtitle = 'ACTIVE'
+    toastData.title = isDraft ? "Draf Tersimpan!" : "Layanan Diperbarui!"
+    toastData.subtitle = isDraft ? 'DRAFT' : 'ACTIVE'
     showToast.value = true
     
     setTimeout(() => {
@@ -100,11 +109,35 @@ async function handlePublish() {
     toastData.title = "Gagal memperbarui"
     toastData.subtitle = err.response?.data?.message || err.message
     showToast.value = true
+    setTimeout(() => { showToast.value = false }, 3000)
   }
 }
 
 function handleBoost() {
   router.push(`/vendor/catalog/promote/${gigId}`)
+}
+function formatRupiah(value: string | number) {
+  if (!value) return ''
+  const numberStr = String(value).replace(/[^0-9]/g, '')
+  if (!numberStr) return ''
+  const numberVal = parseInt(numberStr, 10)
+  if (numberVal === 0) return ''
+  return numberVal.toLocaleString('id-ID')
+}
+
+function handlePriceInput(tier: any, e: Event) {
+  const input = e.target as HTMLInputElement
+  const rawValue = input.value.replace(/[^0-9]/g, '')
+  
+  if (!rawValue || parseInt(rawValue, 10) === 0) {
+    tier.price = ''
+    input.value = ''
+    return
+  }
+  
+  const numValue = parseInt(rawValue, 10)
+  tier.price = String(numValue)
+  input.value = numValue.toLocaleString('id-ID')
 }
 </script>
 
@@ -123,7 +156,7 @@ function handleBoost() {
       <h1 class="text-[28px] font-bold text-gray-900 mb-2">Edit My Gigs</h1>
     </div>
 
-    <form @submit.prevent="handlePublish" class="flex flex-col gap-6 max-w-3xl">
+    <form @submit.prevent="handlePublish(false)" class="flex flex-col gap-6 max-w-3xl">
       <div class="flex flex-col gap-1.5">
         <label class="text-sm font-medium text-gray-700">Judul</label>
         <Input 
@@ -158,7 +191,7 @@ function handleBoost() {
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Harga</label>
                 <div class="relative mt-1">
                   <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
-                  <input v-model="tiers.basic.price" type="number" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
+                  <input :value="formatRupiah(tiers.basic.price)" @input="handlePriceInput(tiers.basic, $event)" type="text" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
                 </div>
               </div>
               <div>
@@ -181,7 +214,7 @@ function handleBoost() {
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Harga</label>
                 <div class="relative mt-1">
                   <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
-                  <input v-model="tiers.standard.price" type="number" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
+                  <input :value="formatRupiah(tiers.standard.price)" @input="handlePriceInput(tiers.standard, $event)" type="text" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
                 </div>
               </div>
               <div>
@@ -204,7 +237,7 @@ function handleBoost() {
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Harga</label>
                 <div class="relative mt-1">
                   <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
-                  <input v-model="tiers.premium.price" type="number" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
+                  <input :value="formatRupiah(tiers.premium.price)" @input="handlePriceInput(tiers.premium, $event)" type="text" class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-navy outline-none transition-all font-bold text-brand-navy" />
                 </div>
               </div>
               <div>
@@ -235,6 +268,10 @@ function handleBoost() {
               <path fill-rule="evenodd" d="M14.77 12.79a.75.75 0 01-1.06-.02L10 8.832 6.29 12.77a.75.75 0 11-1.08-1.04l4.25-4.5a.75.75 0 011.08 0l4.25 4.5a.75.75 0 01-.02 1.06z" clip-rule="evenodd" />
             </svg>
           </span>
+        </button>
+
+        <button type="button" @click="handlePublish(true)" class="flex-1 h-14 rounded-xl text-xl font-medium relative flex items-center justify-center border-2 border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+          Simpan Draf
         </button>
 
         <Button type="submit" variant="primary" class="flex-1 h-14 rounded-xl text-xl font-medium relative flex items-center justify-center">

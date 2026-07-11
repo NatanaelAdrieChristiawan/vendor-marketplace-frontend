@@ -195,11 +195,14 @@ const isParentActive = (item: any) => {
       <div class="sidebar-bottom">
         <router-link to="/vendor/profile" class="profile-card" :title="isCollapsed ? 'Profil' : ''">
           <div class="avatar-wrapper">
-            <img src="https://i.pravatar.cc/150?img=11" alt="Profil" />
+            <img v-if="authStore.user?.avatar || authStore.user?.avatarUrl" :src="authStore.user?.avatar || authStore.user?.avatarUrl" alt="Profil" />
+            <div v-else class="avatar-fallback">
+              {{ (authStore.user?.fullName || authStore.user?.name || 'U').charAt(0).toUpperCase() }}
+            </div>
           </div>
           <div class="profile-info" v-if="!isCollapsed">
-            <span class="profile-name">Budi Pratama</span>
-            <span class="profile-role">Vendor</span>
+            <span class="profile-name">{{ authStore.user?.fullName || authStore.user?.name || 'User' }}</span>
+            <span class="profile-role">{{ authStore.user?.role || 'Vendor' }}</span>
           </div>
         </router-link>
       </div>
@@ -510,6 +513,18 @@ const isParentActive = (item: any) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.avatar-fallback {
+  width: 100%;
+  height: 100%;
+  background-color: #1E3A8A;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .profile-info {

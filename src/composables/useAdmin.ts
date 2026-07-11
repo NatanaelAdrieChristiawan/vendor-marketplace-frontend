@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { unref } from 'vue'
 import api from '../api/axios'
 
 export function useAdmin() {
@@ -16,7 +17,7 @@ export function useAdmin() {
     return useQuery({
       queryKey: ['admin', 'merchants', params],
       queryFn: async () => {
-        const response = await api.get('/admin/validator/merchants', { params })
+        const response = await api.get('/admin/validator/merchants', { params: unref(params) })
         return response.data
       }
     })

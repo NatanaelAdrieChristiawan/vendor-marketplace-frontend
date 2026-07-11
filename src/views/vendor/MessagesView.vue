@@ -27,6 +27,14 @@ const offerForm = ref({
   deadlineDays: 1
 })
 
+const isOfferValid = computed(() => {
+  return offerForm.value.gigId && 
+         offerForm.value.title.trim() && 
+         offerForm.value.description.trim() && 
+         offerForm.value.price > 0 && 
+         offerForm.value.deadlineDays >= 1
+})
+
 const activeChannel = computed(() => {
   return channels.value.find(c => c.id === activeChannelId.value) || null
 })
@@ -471,8 +479,12 @@ onUnmounted(() => {
 
             <div class="flex justify-end pt-4 border-t border-gray-100 gap-3">
               <button @click="isOfferModalOpen = false" class="px-6 py-2 text-sm font-bold text-gray-500 hover:text-gray-700">Batal</button>
-              <button @click="submitOffer" class="px-6 py-2 bg-[#4B6BFB] text-white font-bold rounded-xl hover:bg-[#4B6BFB]/95 transition-all shadow-md">
-                Kirim Penawaran
+              <button 
+                @click="submitOffer" 
+                :disabled="!isOfferValid || isSending"
+                class="px-6 py-2 bg-[#4B6BFB] text-white font-bold rounded-xl hover:bg-[#4B6BFB]/95 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {{ isSending ? 'Mengirim...' : 'Kirim Penawaran' }}
               </button>
             </div>
           </div>

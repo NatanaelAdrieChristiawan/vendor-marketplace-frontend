@@ -72,13 +72,7 @@ onUnmounted(() => {
         </template>
       </nav>
 
-      <!-- Search -->
-      <div class="navbar__search">
-        <svg class="navbar__search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-        </svg>
-        <input v-model="searchQuery" type="search" class="navbar__search-input" placeholder="Cari desain, web..." @keydown.enter="handleSearch" aria-label="Cari layanan" />
-      </div>
+      <!-- Search Removed as requested -->
 
       <!-- Actions: Guest -->
       <div v-if="!isLoggedIn" class="navbar__actions">
@@ -129,10 +123,7 @@ onUnmounted(() => {
     <Transition name="slide-down">
       <div v-if="isMobileMenuOpen" class="navbar__mobile" @click.self="closeMobileMenu">
         <nav class="navbar__mobile-nav">
-          <div class="navbar__mobile-search">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input v-model="searchQuery" type="search" placeholder="Cari desain, web..." @keydown.enter="handleSearch" aria-label="Cari layanan mobile" />
-          </div>
+          <!-- Mobile Search Removed as requested -->
           <router-link to="/jelajahi" class="navbar__mobile-link" @click="closeMobileMenu">Jelajahi</router-link>
           <template v-if="isLoggedIn">
             <router-link to="/pesanan" class="navbar__mobile-link" @click="closeMobileMenu">Pesanan Saya</router-link>
