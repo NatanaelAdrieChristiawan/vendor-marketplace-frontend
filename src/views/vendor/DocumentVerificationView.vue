@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth'
 
 const router = useRouter()
-const { profileQuery, submitKybMutation, uploadFile } = useAuth()
+const { profileQuery, submitKybMutation, uploadFile, logout } = useAuth()
 
 const merchant = computed(() => profileQuery.data.value?.merchant)
 const status = computed(() => merchant.value?.status || 'INCOMPLETE')
@@ -53,6 +53,11 @@ async function handleKybSubmit() {
     errorMessage.value = 'Silakan pilih dokumen KTM / SK Organisasi terlebih dahulu.'
     return
   }
+  const allowedKybTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+  if (!allowedKybTypes.includes(kybFile.value.type)) {
+    errorMessage.value = 'Format dokumen KYB harus berupa PDF, JPG, atau PNG.'
+    return
+  }
   isSubmitting.value = true
   errorMessage.value = ''
 
@@ -88,10 +93,17 @@ function docStatusClass(s: string) {
 
 <template>
   <div class="pv-page">
-    <!-- Back -->
-    <button class="pv-back" @click="router.back()" aria-label="Kembali">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-    </button>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <!-- Back -->
+      <button class="pv-back" style="margin-bottom: 0;" @click="router.back()" aria-label="Kembali">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      
+      <!-- Logout -->
+      <button class="pv-back" style="margin-bottom: 0; width: auto; padding: 0 1rem; border-color: #EF4444; color: #EF4444; font-size: 0.85rem; font-weight: 600;" @click="logout()" aria-label="Keluar">
+        Keluar
+      </button>
+    </div>
 
     <h1 class="pv-title">Profil & Verifikasi</h1>
     <p class="pv-subtitle">Kelola identitas toko Anda dan pantau proses verifikasi akun.</p>

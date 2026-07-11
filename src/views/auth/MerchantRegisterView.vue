@@ -30,9 +30,28 @@ const descCount = computed(() => form.description.length)
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
+function validateFileType(type: 'logo' | 'banner' | 'kyb', file: File): boolean {
+  if (type === 'kyb') {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+    if (!allowed.includes(file.type)) {
+      errorMessage.value = 'Format dokumen KYB harus berupa PDF, JPG, atau PNG.'
+      return false
+    }
+  } else {
+    const allowed = ['image/jpeg', 'image/png', 'image/jpg', 'image/svg+xml']
+    if (!allowed.includes(file.type)) {
+      errorMessage.value = `Format ${type} harus berupa SVG, PNG, atau JPG.`
+      return false
+    }
+  }
+  errorMessage.value = ''
+  return true
+}
+
 function handleFile(type: 'logo' | 'banner' | 'kyb', e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0]
   if (!f) return
+  if (!validateFileType(type, f)) return
   if (type === 'logo') { form.logoFile = f; logoPreview.value = URL.createObjectURL(f) }
   if (type === 'banner') { form.bannerFile = f; bannerPreview.value = URL.createObjectURL(f) }
   if (type === 'kyb') { form.kybFile = f; kybPreview.value = f.name }
@@ -42,21 +61,54 @@ function dropFile(type: 'logo' | 'banner' | 'kyb', e: DragEvent) {
   e.preventDefault()
   const f = e.dataTransfer?.files?.[0]
   if (!f) return
+  if (!validateFileType(type, f)) return
   if (type === 'logo') { form.logoFile = f; logoPreview.value = URL.createObjectURL(f) }
   if (type === 'banner') { form.bannerFile = f; bannerPreview.value = URL.createObjectURL(f) }
   if (type === 'kyb') { form.kybFile = f; kybPreview.value = f.name }
 }
 
 function nextStep() {
-  if (!form.storeName || !form.description || !form.bankName || !form.bankAccount || !form.bankHolder) return
+  errorMessage.value = ''
+  if (!form.storeName || !form.description || !form.bankName || !form.bankAccount || !form.bankHolder) {
+    errorMessage.value = 'Mohon lengkapi semua bidang pada formulir.'
+    return
+  }
+  if (form.description.length < 50) {
+    errorMessage.value = 'Deskripsi singkat minimal 50 karakter.'
+    return
+  }
+  if (form.logoFile) {
+    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/svg+xml']
+    if (!allowedImageTypes.includes(form.logoFile.type)) {
+      errorMessage.value = 'Format logo harus berupa SVG, PNG, atau JPG.'
+      return
+    }
+  }
+  if (form.bannerFile) {
+    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/svg+xml']
+    if (!allowedImageTypes.includes(form.bannerFile.type)) {
+      errorMessage.value = 'Format banner harus berupa SVG, PNG, atau JPG.'
+      return
+    }
+  }
   currentStep.value = 2
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 async function handleSubmit() {
-  if (!form.storeName || !form.description) return
-  isSubmitting.value = true
   errorMessage.value = ''
+  if (!form.storeName || !form.description) return
+  if (!form.kybFile) {
+    errorMessage.value = 'Mohon unggah dokumen KTM / SK Organisasi.'
+    return
+  }
+  const allowedKybTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+  if (!allowedKybTypes.includes(form.kybFile.type)) {
+    errorMessage.value = 'Format dokumen KYB harus berupa PDF, JPG, atau PNG.'
+    return
+  }
+  
+  isSubmitting.value = true
 
   try {
     let logoUrl = ''
@@ -204,6 +256,10 @@ async function handleSubmit() {
         <input v-model="form.bankHolder" class="mr-input" placeholder="Sesuai yang tertera di buku tabungan" required />
         <span class="mr-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg> Nama harus sesuai dengan identitas legal untuk kelancaran verifikasi.</span>
       </section>
+
+      <p v-if="errorMessage" class="mr-error" style="margin-bottom: 1rem;">
+        {{ errorMessage }}
+      </p>
 
       <button class="mr-btn" @click="nextStep">Lanjut ke Verifikasi KYB <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
     </div>

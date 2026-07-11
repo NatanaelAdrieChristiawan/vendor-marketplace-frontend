@@ -71,14 +71,10 @@ function removeFile(idx: number) {
 }
 
 function handleSaveDraft() {
-  toastData.type = 'info'
-  toastData.title = 'Draf Tersimpan'
-  toastData.subtitle = 'Layanan disimpan sebagai draf'
-  showToast.value = true
-  setTimeout(() => { showToast.value = false }, 3000)
+  handleComplete(true)
 }
 
-async function handleComplete() {
+async function handleComplete(isDraft = false) {
   if (!title.value.trim()) {
     showErrorToast('Judul Wajib Diisi', 'Silakan masukkan nama layanan')
     return
@@ -96,10 +92,18 @@ async function handleComplete() {
     return
   }
 
+  for (const tier of tiers.value) {
+    const priceNum = parseFloat(tier.price || '0')
+    if (isNaN(priceNum) || priceNum <= 0) {
+      showErrorToast('Harga Tidak Valid', `Harga pada paket ${tier.name} harus lebih dari 0.`)
+      return
+    }
+  }
+
   isSubmitting.value = true
   toastData.type = 'info'
-  toastData.title = 'Mengunggah Berkas...'
-  toastData.subtitle = 'Sedang mengunggah portofolio ke cloud storage'
+  toastData.title = isDraft ? 'Menyimpan Draf...' : 'Mengunggah Berkas...'
+  toastData.subtitle = isDraft ? 'Sedang menyimpan sebagai draf' : 'Sedang mengunggah portofolio ke cloud storage'
   showToast.value = true
 
   try {
@@ -154,14 +158,15 @@ async function handleComplete() {
       title: title.value,
       description: serializedDescription,
       price: standardPriceNum,
-      mediaUrls: mainImageUrl
+      mediaUrls: mainImageUrl,
+      status: isDraft === true ? 'DRAFT' : 'PENDING'
     }
 
     await api.post('/gigs', payload)
 
     toastData.type = 'success'
-    toastData.title = 'Berhasil Terbit'
-    toastData.subtitle = 'Layanan Anda sedang dikirim untuk moderasi'
+    toastData.title = isDraft ? 'Draf Tersimpan' : 'Berhasil Terbit'
+    toastData.subtitle = isDraft ? 'Layanan Anda berhasil disimpan sebagai draf' : 'Layanan Anda sedang dikirim untuk moderasi'
     showToast.value = true
 
     setTimeout(() => {
@@ -173,6 +178,30 @@ async function handleComplete() {
   } finally {
     isSubmitting.value = false
   }
+}
+
+function formatRupiah(value: string | number) {
+  if (!value) return ''
+  const numberStr = String(value).replace(/[^0-9]/g, '')
+  if (!numberStr) return ''
+  const numberVal = parseInt(numberStr, 10)
+  if (numberVal === 0) return ''
+  return numberVal.toLocaleString('id-ID')
+}
+
+function handlePriceInput(tier: any, e: Event) {
+  const input = e.target as HTMLInputElement
+  const rawValue = input.value.replace(/[^0-9]/g, '')
+  
+  if (!rawValue || parseInt(rawValue, 10) === 0) {
+    tier.price = ''
+    input.value = ''
+    return
+  }
+  
+  const numValue = parseInt(rawValue, 10)
+  tier.price = String(numValue)
+  input.value = numValue.toLocaleString('id-ID')
 }
 </script>
 
@@ -242,7 +271,8 @@ async function handleComplete() {
               <span class="price-prefix">Rp</span>
               <input
                 type="text"
-                v-model="tier.price"
+                :value="formatRupiah(tier.price)"
+                @input="handlePriceInput(tier, $event)"
                 class="price-input"
               />
             </div>
@@ -297,7 +327,7 @@ async function handleComplete() {
       <!-- Footer Actions -->
       <div class="form-actions">
         <button class="btn-draft" :disabled="isSubmitting" @click="handleSaveDraft">Simpan Draf</button>
-        <button class="btn-submit" :disabled="isSubmitting" @click="handleComplete">
+        <button class="btn-submit" :disabled="isSubmitting" @click="handleComplete(false)">
           {{ isSubmitting ? 'Menerbitkan...' : 'Selesai' }}
         </button>
       </div>

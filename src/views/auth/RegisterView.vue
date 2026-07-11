@@ -55,6 +55,13 @@ const strengthLabel = computed(() => {
 function goStep1() {
   pwError.value = ''
   if (!form.email || !form.password || !form.confirmPassword) return
+  
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(form.email)) {
+    pwError.value = 'Format email tidak valid.'
+    return
+  }
+
   if (form.password !== form.confirmPassword) {
     pwError.value = 'Kata sandi tidak cocok.'
     return

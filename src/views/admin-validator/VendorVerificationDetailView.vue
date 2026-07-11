@@ -20,7 +20,19 @@ const parsedKyb = computed(() => {
   }
 })
 
-const rejectReason = ref('')
+const predefinedReasons = [
+  'KTM / SK Organisasi tidak valid atau kedaluwarsa.',
+  'Informasi identitas toko tidak sesuai.',
+  'Kualitas dokumen yang diunggah buram/tidak terbaca.',
+  'Website portofolio tidak dapat diakses.'
+]
+const selectedReasons = ref<string[]>([])
+const additionalReason = ref('')
+const rejectReason = computed(() => {
+  const allReasons = [...selectedReasons.value]
+  if (additionalReason.value) allReasons.push(additionalReason.value)
+  return allReasons.join('\n')
+})
 const showRejectModal = ref(false)
 
 function goBack() {
@@ -33,7 +45,8 @@ function openRejectModal() {
 
 function closeRejectModal() {
   showRejectModal.value = false
-  rejectReason.value = ''
+  selectedReasons.value = []
+  additionalReason.value = ''
 }
 
 async function submitReject() {
@@ -211,12 +224,21 @@ async function submitApprove() {
           </button>
         </div>
         <div class="p-8">
-          <p class="text-sm text-gray-600 mb-6">Berikan alasan yang jelas agar vendor dapat melakukan perbaikan data.</p>
-          <label class="block text-base font-bold text-gray-900 mb-3">Catatan Alasan</label>
+          <p class="text-sm text-gray-600 mb-6">Pilih data yang tidak valid atau berikan alasan tambahan.</p>
+          
+          <div class="mb-4 space-y-3">
+            <label class="block text-sm font-bold text-gray-900 mb-2">Alasan Penolakan</label>
+            <div v-for="reason in predefinedReasons" :key="reason" class="flex items-start gap-2">
+              <input type="checkbox" :id="reason" :value="reason" v-model="selectedReasons" class="mt-1" />
+              <label :for="reason" class="text-sm text-gray-700 cursor-pointer">{{ reason }}</label>
+            </div>
+          </div>
+
+          <label class="block text-sm font-bold text-gray-900 mb-2 mt-4">Catatan Tambahan (Opsional)</label>
           <textarea 
-            v-model="rejectReason"
-            rows="5"
-            placeholder="Tulis alasan penolakan di sini..."
+            v-model="additionalReason"
+            rows="3"
+            placeholder="Tulis catatan tambahan di sini..."
             class="w-full p-4 border border-gray-200 rounded-[12px] text-sm focus:outline-none focus:ring-2 focus:ring-[#DF4A4A] focus:border-transparent resize-none bg-white"
           ></textarea>
           

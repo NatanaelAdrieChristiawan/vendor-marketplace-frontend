@@ -128,17 +128,15 @@ async function processPayment() {
     }
 
     // 3. Send requirements metadata to order
-    if (notes.value || files.value) {
-      try {
-        await api.patch(`/orders/${orderId}/requirements`, {
-          plan: planName.value,
-          price: chosenPrice.value,
-          notes: notes.value || 'Tidak ada catatan.',
-          files: files.value
-        })
-      } catch (reqErr) {
-        console.warn('Failed to save order requirements', reqErr)
-      }
+    try {
+      await api.patch(`/orders/${orderId}/requirements`, {
+        plan: planName.value,
+        price: chosenPrice.value,
+        notes: notes.value || 'Tidak ada catatan.',
+        files: files.value || ''
+      })
+    } catch (reqErr) {
+      console.warn('Failed to save order requirements', reqErr)
     }
 
     // 4. Handle based on payment method
