@@ -118,11 +118,13 @@ function docStatusClass(s: string) {
       <div class="pv-banner__text">
         <strong v-if="status === 'PENDING_VERIFICATION'">Sedang Ditinjau</strong>
         <strong v-else-if="status === 'REJECTED'">Pengajuan toko Anda belum dapat disetujui.</strong>
+        <strong v-else-if="status === 'INCOMPLETE' && parsedKyb">Dokumen Sedang Diproses</strong>
         <strong v-else-if="status === 'INCOMPLETE'">Profil Belum Lengkap</strong>
         <strong v-else>Toko Anda berhasil diverifikasi! 🎉</strong>
         
         <p v-if="status === 'PENDING_VERIFICATION'">Tim verifikator kami sedang memeriksa dokumen Anda. Proses ini biasanya memakan waktu 1-2 hari kerja.</p>
         <p v-else-if="status === 'REJECTED'">{{ merchant?.rejectionReason || 'Silakan perbaiki data dan kirim ulang untuk proses verifikasi.' }}</p>
+        <p v-else-if="status === 'INCOMPLETE' && parsedKyb">Dokumen KYB Anda sudah dikirim dan sedang dalam antrean untuk ditinjau.</p>
         <p v-else-if="status === 'INCOMPLETE'">Lengkapi data toko dan unggah dokumen KYB untuk memulai verifikasi.</p>
         <p v-else>Sekarang Anda sudah dapat mulai menawarkan layanan dan menerima pesanan.</p>
       </div>
@@ -173,7 +175,7 @@ function docStatusClass(s: string) {
         </div>
         <div class="pv-doc__info">
           <span class="pv-doc__name" style="margin-bottom: 0.375rem;">KTM / SK Organisasi</span>
-          <div v-if="status === 'INCOMPLETE' || status === 'REJECTED'">
+          <div v-if="(status === 'INCOMPLETE' || status === 'REJECTED') && !parsedKyb">
             <div class="pv-upload-box" @click="($refs.kybFileInput as HTMLInputElement).click()" @dragover.prevent @drop="dropKybFile($event)">
               <template v-if="kybPreview">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -197,7 +199,7 @@ function docStatusClass(s: string) {
         </div>
         <div class="pv-doc__info">
           <span class="pv-doc__name">Portofolio</span>
-          <input v-if="status === 'INCOMPLETE' || status === 'REJECTED'" v-model="portfolioUrl" class="field__input text-xs" placeholder="URL Portofolio (misal: https://behance.net/username)" style="margin-top:.375rem" />
+          <input v-if="(status === 'INCOMPLETE' || status === 'REJECTED') && !parsedKyb" v-model="portfolioUrl" class="field__input text-xs" placeholder="URL Portofolio (misal: https://behance.net/username)" style="margin-top:.375rem" />
           <span v-else class="pv-doc__file">{{ parsedKyb?.portfolioUrl || 'Sedang diverifikasi' }}</span>
         </div>
         <span class="doc-badge" :class="docStatusClass(status)">{{ docStatusLabel(status) }}</span>
@@ -228,7 +230,7 @@ function docStatusClass(s: string) {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </button>
       <button 
-        v-else-if="status === 'INCOMPLETE' || status === 'REJECTED'" 
+        v-else-if="(status === 'INCOMPLETE' || status === 'REJECTED') && !parsedKyb" 
         class="pv-btn pv-btn--blue" 
         :disabled="isSubmitting"
         @click="handleKybSubmit"

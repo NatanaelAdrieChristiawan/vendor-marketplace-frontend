@@ -146,13 +146,13 @@ async function handleSubmit() {
             })
           }
           registrationStore.reset()
-          router.push('/vendor/dashboard')
+          router.push('/vendor/documents')
         } catch (err: any) {
           console.error('Error submitting KYB document:', err)
           // Even if KYB submission fails, the merchant was successfully registered and logged in,
           // so redirecting to the dashboard is appropriate. They can retry there.
           registrationStore.reset()
-          router.push('/vendor/dashboard')
+          router.push('/vendor/documents')
         } finally {
           isSubmitting.value = false
         }
