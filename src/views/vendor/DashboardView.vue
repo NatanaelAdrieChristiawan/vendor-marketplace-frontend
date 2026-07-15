@@ -60,27 +60,25 @@ async function handleAccept(id: number) {
 
 <template>
   <div class="py-2 relative">
-    <div v-if="!isVerified" class="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[8px]">
-      <div class="flex items-center gap-6">
-        <div class="w-24 h-24 rounded-full bg-black flex items-center justify-center text-white text-[56px] font-bold leading-none">
-          <span v-if="merchantStatus === 'REJECTED'" class="text-red-500">!</span>
-          <span v-else>!</span>
-        </div>
-        
-        <div v-if="merchantStatus === 'INCOMPLETE'" class="flex flex-col gap-1.5">
-          <h2 class="text-[32px] font-bold text-gray-900">Dokumen kamu belum lengkap!</h2>
-          <p class="text-[17px] text-gray-800">Lengkapi dokumen yang diperlukan, <router-link to="/vendor/documents" class="text-[#2F4DC4] font-bold hover:underline">disini</router-link></p>
-        </div>
+    <div v-if="!isVerified" style="margin-bottom: 2rem; padding: 1.5rem 2rem; border-radius: 1rem; display: flex; align-items: center; gap: 1.25rem; border: 1.5px solid #E5E7EB; background: #F9FAFB;">
+      <div style="width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; flex-shrink: 0;"
+        :style="{ background: merchantStatus === 'REJECTED' ? '#FEE2E2' : '#DBEAFE', color: merchantStatus === 'REJECTED' ? '#DC2626' : '#2563EB' }">
+        !
+      </div>
+      
+      <div v-if="merchantStatus === 'INCOMPLETE'" style="display: flex; flex-direction: column; gap: 0.25rem;">
+        <h2 style="font-size: 1.125rem; font-weight: 700; color: #111827; margin: 0;">Dokumen kamu belum lengkap!</h2>
+        <p style="font-size: 0.9rem; color: #4B5563; margin: 0;">Lengkapi dokumen yang diperlukan, <router-link to="/vendor/documents" style="color: #2563EB; font-weight: 600; text-decoration: none;">disini</router-link></p>
+      </div>
 
-        <div v-else-if="merchantStatus === 'PENDING_VERIFICATION'" class="flex flex-col gap-1.5">
-          <h2 class="text-[32px] font-bold text-gray-900">Profil kamu lagi di cek sama admin</h2>
-          <p class="text-[17px] text-gray-800">Status Merchant <span class="text-[#2F4DC4] font-bold">PENDING_VERIFICATION</span></p>
-        </div>
+      <div v-else-if="merchantStatus === 'PENDING_VERIFICATION'" style="display: flex; flex-direction: column; gap: 0.25rem;">
+        <h2 style="font-size: 1.125rem; font-weight: 700; color: #111827; margin: 0;">Profil kamu sedang dicek oleh admin</h2>
+        <p style="font-size: 0.9rem; color: #4B5563; margin: 0;">Status Merchant: <span style="color: #2563EB; font-weight: 600;">PENDING_VERIFICATION</span></p>
+      </div>
 
-        <div v-else-if="merchantStatus === 'REJECTED'" class="flex flex-col gap-1.5">
-          <h2 class="text-[32px] font-bold text-gray-900">Verifikasi dokumen kamu ditolak</h2>
-          <p class="text-[17px] text-gray-800">Status Merchant <span class="text-red-600 font-bold">REJECTED</span>. Silakan <router-link to="/vendor/documents" class="text-[#2F4DC4] font-bold hover:underline">upload ulang</router-link></p>
-        </div>
+      <div v-else-if="merchantStatus === 'REJECTED'" style="display: flex; flex-direction: column; gap: 0.25rem;">
+        <h2 style="font-size: 1.125rem; font-weight: 700; color: #111827; margin: 0;">Verifikasi dokumen kamu ditolak</h2>
+        <p style="font-size: 0.9rem; color: #4B5563; margin: 0;">Status Merchant: <span style="color: #DC2626; font-weight: 600;">REJECTED</span>. Silakan <router-link to="/vendor/documents" style="color: #2563EB; font-weight: 600; text-decoration: none;">upload ulang</router-link></p>
       </div>
     </div>
 

@@ -33,9 +33,26 @@ const portfolioUrl = ref('')
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
+const allowedKybTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+
+function validateKybFile(f: File): boolean {
+  if (!allowedKybTypes.includes(f.type)) {
+    errorMessage.value = 'Format dokumen KYB harus berupa PDF, JPG, atau PNG.'
+    kybFile.value = null
+    kybPreview.value = ''
+    return false
+  }
+  errorMessage.value = ''
+  return true
+}
+
 function handleKybFile(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0]
   if (!f) return
+  if (!validateKybFile(f)) {
+    (e.target as HTMLInputElement).value = ''
+    return
+  }
   kybFile.value = f
   kybPreview.value = f.name
 }
@@ -44,6 +61,7 @@ function dropKybFile(e: DragEvent) {
   e.preventDefault()
   const f = e.dataTransfer?.files?.[0]
   if (!f) return
+  if (!validateKybFile(f)) return
   kybFile.value = f
   kybPreview.value = f.name
 }
@@ -53,9 +71,7 @@ async function handleKybSubmit() {
     errorMessage.value = 'Silakan pilih dokumen KTM / SK Organisasi terlebih dahulu.'
     return
   }
-  const allowedKybTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
-  if (!allowedKybTypes.includes(kybFile.value.type)) {
-    errorMessage.value = 'Format dokumen KYB harus berupa PDF, JPG, atau PNG.'
+  if (!validateKybFile(kybFile.value)) {
     return
   }
   isSubmitting.value = true
