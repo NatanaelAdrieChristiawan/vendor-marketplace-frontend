@@ -87,7 +87,7 @@ async function handleComplete(isDraft = false) {
     showErrorToast('Kategori Wajib Diisi', 'Silakan pilih kategori layanan')
     return
   }
-  if (rawFiles.value.length === 0) {
+  if (!isDraft && rawFiles.value.length === 0) {
     showErrorToast('Media Portofolio Wajib', 'Harap unggah minimal satu berkas portofolio utama')
     return
   }
@@ -107,15 +107,12 @@ async function handleComplete(isDraft = false) {
   showToast.value = true
 
   try {
-    // 1. Upload main media file
+    // 1. Upload main media file (skip for draft if no files)
+    let mainImageUrl = ''
     const firstFile = rawFiles.value[0]
-    if (!firstFile) {
-      throw new Error('Berkas portofolio utama tidak ditemukan')
-    }
-    const mainUploadRes = await uploadFile(firstFile, 'merchant-assets')
-    const mainImageUrl = mainUploadRes.url || mainUploadRes.data?.url
-    if (!mainImageUrl) {
-      throw new Error('Gagal mendapatkan URL gambar utama')
+    if (firstFile) {
+      const mainUploadRes = await uploadFile(firstFile, 'merchant-assets')
+      mainImageUrl = mainUploadRes.url || mainUploadRes.data?.url || ''
     }
 
     // 2. Upload secondary media files
@@ -158,8 +155,8 @@ async function handleComplete(isDraft = false) {
       title: title.value,
       description: serializedDescription,
       price: standardPriceNum,
-      mediaUrls: mainImageUrl,
-      status: isDraft === true ? 'DRAFT' : 'PENDING'
+      mediaUrls: mainImageUrl || undefined,
+      status: isDraft === true ? 'DRAFT' : 'PENDING_APPROVAL'
     }
 
     await api.post('/gigs', payload)
