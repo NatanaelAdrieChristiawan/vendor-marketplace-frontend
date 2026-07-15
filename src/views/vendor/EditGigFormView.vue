@@ -90,7 +90,7 @@ async function handlePublish(isDraft = false) {
       }),
       price: parseFloat(String(tiers.basic.price).replace(/[^0-9]/g, '')) || 0,
       mediaUrls: mainImageUrl,
-      status: isDraft ? 'DRAFT' : 'PENDING'
+      status: isDraft ? 'DRAFT' : 'PENDING_APPROVAL'
     }
 
     await api.patch(`/gigs/${gigId}`, payload)
