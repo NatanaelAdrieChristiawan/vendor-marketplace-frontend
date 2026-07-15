@@ -552,7 +552,6 @@ const isParentActive = (item: any) => {
 .main-content {
   flex: 1;
   max-width: 1400px;
-  margin: 0 auto;
   background: #FAF9F9;
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 0;
