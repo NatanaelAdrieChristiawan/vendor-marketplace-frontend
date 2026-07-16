@@ -20,20 +20,26 @@ const parsedKyb = computed(() => {
   }
 })
 
-const predefinedReasons = [
-  'KTM / SK Organisasi tidak valid atau kedaluwarsa.',
-  'Informasi identitas toko tidak sesuai.',
-  'Kualitas dokumen yang diunggah buram/tidak terbaca.',
-  'Website portofolio tidak dapat diakses.'
-]
-const selectedReasons = ref<string[]>([])
-const additionalReason = ref('')
-const rejectReason = computed(() => {
-  const allReasons = [...selectedReasons.value]
-  if (additionalReason.value) allReasons.push(additionalReason.value)
-  return allReasons.join('\n')
-})
 const showRejectModal = ref(false)
+const rejectStep = ref(1) // Step 1: select invalid data, Step 2: input rejection reason notes
+const unmatchingData = ref<string[]>([]) // ['identity', 'portfolio']
+const rejectionNotes = ref('')
+
+const rejectReason = computed(() => {
+  const categories: string[] = []
+  if (unmatchingData.value.includes('identity')) {
+    categories.push('- Dokumen Identitas tidak sesuai')
+  }
+  if (unmatchingData.value.includes('portfolio')) {
+    categories.push('- Portofolio tidak sesuai')
+  }
+  
+  const header = categories.length > 0 
+    ? 'Data yang tidak sesuai:\n' + categories.join('\n') + '\n\nCatatan perbaikan:\n' 
+    : 'Catatan perbaikan:\n'
+    
+  return header + rejectionNotes.value.trim()
+})
 
 function goBack() {
   router.push('/admin-validator/vendor-verification')
@@ -41,16 +47,20 @@ function goBack() {
 
 function openRejectModal() {
   showRejectModal.value = true
+  rejectStep.value = 1
+  unmatchingData.value = []
+  rejectionNotes.value = ''
 }
 
 function closeRejectModal() {
   showRejectModal.value = false
-  selectedReasons.value = []
-  additionalReason.value = ''
+  rejectStep.value = 1
+  unmatchingData.value = []
+  rejectionNotes.value = ''
 }
 
 async function submitReject() {
-  if (!rejectReason.value) return
+  if (!rejectionNotes.value.trim()) return
   
   await verifyMerchantMutation.mutateAsync({
     id: merchantId,
@@ -217,36 +227,64 @@ async function submitApprove() {
     <div v-if="showRejectModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 animate-fade-in">
       <div class="absolute inset-0" @click="closeRejectModal"></div>
       <div class="relative w-full max-w-[450px] bg-white rounded-[20px] shadow-2xl overflow-hidden">
+        <!-- Header -->
         <div class="bg-[#DF4A4A] px-6 py-5 flex items-center justify-between">
-          <h3 class="text-white font-bold text-lg">Tolak Pengajuan</h3>
+          <div class="flex items-center gap-3">
+            <button v-if="rejectStep === 2" @click="rejectStep = 1" class="text-white hover:text-red-200 transition-colors">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <h3 class="text-white font-bold text-lg">Tolak Pengajuan</h3>
+          </div>
           <button @click="closeRejectModal" class="text-white hover:text-red-200 transition-colors">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <div class="p-8">
-          <p class="text-sm text-gray-600 mb-6">Pilih data yang tidak valid atau berikan alasan tambahan.</p>
-          
-          <div class="mb-4 space-y-3">
-            <label class="block text-sm font-bold text-gray-900 mb-2">Alasan Penolakan</label>
-            <div v-for="reason in predefinedReasons" :key="reason" class="flex items-start gap-2">
-              <input type="checkbox" :id="reason" :value="reason" v-model="selectedReasons" class="mt-1" />
-              <label :for="reason" class="text-sm text-gray-700 cursor-pointer">{{ reason }}</label>
-            </div>
-          </div>
 
-          <label class="block text-sm font-bold text-gray-900 mb-2 mt-4">Catatan Tambahan (Opsional)</label>
-          <textarea 
-            v-model="additionalReason"
-            rows="3"
-            placeholder="Tulis catatan tambahan di sini..."
-            class="w-full p-4 border border-gray-200 rounded-[12px] text-sm focus:outline-none focus:ring-2 focus:ring-[#DF4A4A] focus:border-transparent resize-none bg-white"
-          ></textarea>
+        <!-- Step 1: Select Invalid Data -->
+        <div v-if="rejectStep === 1" class="p-8">
+          <p class="text-sm font-bold text-gray-900 mb-5">Tandai data yang tidak sesuai</p>
           
-          <div class="flex justify-end mt-8">
+          <div class="space-y-4 mb-8">
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" value="identity" v-model="unmatchingData" class="w-5 h-5 text-[#1E3A8A] border-gray-300 rounded focus:ring-[#1E3A8A]" />
+              <span class="text-sm font-medium text-gray-700">Dokumen identitas</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" value="portfolio" v-model="unmatchingData" class="w-5 h-5 text-[#1E3A8A] border-gray-300 rounded focus:ring-[#1E3A8A]" />
+              <span class="text-sm font-medium text-gray-700">Portofolio</span>
+            </label>
+          </div>
+          
+          <div class="flex justify-end">
+            <button 
+              @click="rejectStep = 2" 
+              :disabled="unmatchingData.length === 0"
+              class="bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 disabled:opacity-50 text-white font-bold py-3 px-8 rounded-xl transition-colors text-sm shadow-sm"
+            >
+              Lanjut
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Input Notes -->
+        <div v-else class="p-8">
+          <p class="text-xs text-gray-500 leading-relaxed mb-6">Berikan alasan yang jelas agar merchant dapat melakukan perbaikan data.</p>
+          
+          <div class="space-y-2 mb-6">
+            <label class="block text-xs font-bold text-gray-900 uppercase tracking-wider">Catatan</label>
+            <textarea 
+              v-model="rejectionNotes"
+              rows="4"
+              placeholder="Tulis instruksi perbaikan untuk customer di sini..."
+              class="w-full p-4 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DF4A4A] focus:border-transparent resize-none bg-white placeholder-gray-400 text-gray-700"
+            ></textarea>
+          </div>
+          
+          <div class="flex justify-end">
             <button 
               @click="submitReject" 
-              :disabled="verifyMerchantMutation.isPending.value || !rejectReason"
-              class="bg-[#DF4A4A] hover:bg-red-700 disabled:opacity-50 text-white font-bold py-3 px-10 rounded-[12px] transition-colors text-base shadow-sm"
+              :disabled="verifyMerchantMutation.isPending.value || !rejectionNotes.trim()"
+              class="bg-[#DF4A4A] hover:bg-red-700 disabled:opacity-50 text-white font-bold py-3 px-8 rounded-xl transition-colors text-sm shadow-sm"
             >
               {{ verifyMerchantMutation.isPending.value ? 'Memproses...' : 'Tolak' }}
             </button>
