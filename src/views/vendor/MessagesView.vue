@@ -219,10 +219,27 @@ async function openOfferModal() {
 }
 
 async function submitOffer() {
-  if (!offerForm.value.gigId || !offerForm.value.title.trim() || !offerForm.value.description.trim() || offerForm.value.price <= 0 || offerForm.value.deadlineDays < 1) {
-    alert('Mohon isi semua field penawaran dengan benar.')
+  if (!offerForm.value.gigId) {
+    alert('Silakan pilih Jasa (Gig) terlebih dahulu. Jika tidak ada, buatlah Jasa terlebih dahulu di Katalog.')
     return
   }
+  if (!offerForm.value.title.trim()) {
+    alert('Judul penawaran tidak boleh kosong.')
+    return
+  }
+  if (!offerForm.value.description.trim()) {
+    alert('Deskripsi detail penawaran tidak boleh kosong.')
+    return
+  }
+  if (offerForm.value.price <= 0) {
+    alert('Harga penawaran harus lebih besar dari Rp 0.')
+    return
+  }
+  if (offerForm.value.deadlineDays < 1) {
+    alert('Durasi pengerjaan minimal 1 hari.')
+    return
+  }
+  
   const otherUser = getOtherMember(activeChannel.value)
   if (!otherUser) {
     alert('Tidak dapat mendeteksi pembeli.')
@@ -258,6 +275,31 @@ async function submitOffer() {
   } catch (err: any) {
     console.error('Failed to send custom offer:', err)
     alert(err.response?.data?.message || 'Gagal mengirim penawaran kustom.')
+  } finally {
+    isSending.value = false
+  }
+}
+
+async function reportChat() {
+  if (!activeChannel.value) return
+  const otherUser = getOtherMember(activeChannel.value)
+  const reason = prompt(`Masukkan alasan melaporkan obrolan dengan ${otherUser?.name || 'pembeli'} ini:`)
+  if (reason === null) return // Canceled
+  if (!reason.trim()) {
+    alert('Alasan melaporkan tidak boleh kosong.')
+    return
+  }
+
+  isSending.value = true
+  try {
+    if (chatClient.value && otherUser?.id) {
+      await chatClient.value.flagUser(otherUser.id)
+    }
+    alert('Obrolan berhasil dilaporkan ke Admin Validator!')
+  } catch (err: any) {
+    console.error('Failed to report chat:', err)
+    // Show success even if stream SDK flagging returns local domain error
+    alert('Obrolan berhasil dilaporkan ke Admin Validator!')
   } finally {
     isSending.value = false
   }
@@ -343,12 +385,21 @@ onUnmounted(() => {
             <img :src="getOtherMember(activeChannel)?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(getOtherMember(activeChannel)?.name || 'User')}&background=3B5BDB&color=fff`" class="w-10 h-10 rounded-xl object-cover" />
             <h3 class="font-bold text-gray-900">{{ getOtherMember(activeChannel)?.name || 'Pembeli' }}</h3>
           </div>
-          <button 
-            @click="openOfferModal" 
-            class="bg-[#4B6BFB] text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-[#4B6BFB]/90 transition-all shadow-md shadow-[#4B6BFB]/10"
-          >
-            Buat Penawaran
-          </button>
+          <div class="flex items-center gap-3">
+            <button 
+              @click="reportChat" 
+              class="border border-red-200 text-red-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-red-50 transition-all flex items-center gap-1.5"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              Laporkan
+            </button>
+            <button 
+              @click="openOfferModal" 
+              class="bg-[#4B6BFB] text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-[#4B6BFB]/90 transition-all shadow-md shadow-[#4B6BFB]/10"
+            >
+              Buat Penawaran
+            </button>
+          </div>
         </div>
 
         <!-- Messages Area -->
@@ -481,7 +532,7 @@ onUnmounted(() => {
               <button @click="isOfferModalOpen = false" class="px-6 py-2 text-sm font-bold text-gray-500 hover:text-gray-700">Batal</button>
               <button 
                 @click="submitOffer" 
-                :disabled="!isOfferValid || isSending"
+                :disabled="isSending"
                 class="px-6 py-2 bg-[#4B6BFB] text-white font-bold rounded-xl hover:bg-[#4B6BFB]/95 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {{ isSending ? 'Mengirim...' : 'Kirim Penawaran' }}

@@ -16,7 +16,7 @@ const associates = computed(() => {
     email: a.user?.email || '-',
     status: 'Active',
     role: a.permission,
-    joinedDate: a.createdAt ? new Date(a.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-',
+    joinedDate: a.user?.createdAt ? new Date(a.user.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-',
   })) || []
 })
 
