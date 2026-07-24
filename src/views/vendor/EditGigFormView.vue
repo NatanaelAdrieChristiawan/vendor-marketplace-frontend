@@ -74,7 +74,7 @@ async function handlePublish(isDraft = false) {
 
     let mainImageUrl = gig.value?.mediaUrls
     if (mediaFile.value) {
-      const uploadRes = await uploadFile(mediaFile.value, 'merchant-assets')
+      const uploadRes = await uploadFile(mediaFile.value, 'gig-media')
       mainImageUrl = uploadRes.url || uploadRes.data?.url
     }
 

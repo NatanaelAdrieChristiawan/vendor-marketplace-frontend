@@ -111,7 +111,7 @@ async function handleComplete(isDraft = false) {
     let mainImageUrl = ''
     const firstFile = rawFiles.value[0]
     if (firstFile) {
-      const mainUploadRes = await uploadFile(firstFile, 'merchant-assets')
+      const mainUploadRes = await uploadFile(firstFile, 'gig-media')
       mainImageUrl = mainUploadRes.url || mainUploadRes.data?.url || ''
     }
 
@@ -120,7 +120,7 @@ async function handleComplete(isDraft = false) {
     for (let i = 1; i < rawFiles.value.length; i++) {
       const file = rawFiles.value[i]
       if (file) {
-        const extraRes = await uploadFile(file, 'merchant-assets')
+        const extraRes = await uploadFile(file, 'gig-media')
         const extraUrl = extraRes.url || extraRes.data?.url
         if (extraUrl) {
           extraMediaUrls.push(extraUrl)

@@ -26,13 +26,13 @@ async function handleSubmit() {
   try {
     let logoUrl = registrationStore.logoUrl
     if (logoFile.value) {
-      const res = await uploadFile(logoFile.value)
+      const res = await uploadFile(logoFile.value, 'merchant-assets')
       logoUrl = res.url
     }
 
     let bannerUrl = registrationStore.bannerUrl
     if (bannerFile.value) {
-      const res = await uploadFile(bannerFile.value)
+      const res = await uploadFile(bannerFile.value, 'merchant-assets')
       bannerUrl = res.url
     }
 

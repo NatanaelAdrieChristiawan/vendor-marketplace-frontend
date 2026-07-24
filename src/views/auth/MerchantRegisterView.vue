@@ -113,13 +113,13 @@ async function handleSubmit() {
   try {
     let logoUrl = ''
     if (form.logoFile) {
-      const res = await uploadFile(form.logoFile)
+      const res = await uploadFile(form.logoFile, 'merchant-assets')
       logoUrl = res.url
     }
 
     let bannerUrl = ''
     if (form.bannerFile) {
-      const res = await uploadFile(form.bannerFile)
+      const res = await uploadFile(form.bannerFile, 'merchant-assets')
       bannerUrl = res.url
     }
 
@@ -138,7 +138,7 @@ async function handleSubmit() {
       onSuccess: async () => {
         try {
           if (form.kybFile) {
-            const kybRes = await uploadFile(form.kybFile, 'merchant-assets')
+            const kybRes = await uploadFile(form.kybFile, 'merchant-kyb')
             const kybUrl = kybRes.url
             await submitKybMutation.mutateAsync({
               kybDocumentUrl: kybUrl,

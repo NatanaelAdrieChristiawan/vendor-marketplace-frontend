@@ -78,7 +78,7 @@ async function handleKybSubmit() {
   errorMessage.value = ''
 
   try {
-    const uploadRes = await uploadFile(kybFile.value, 'merchant-assets')
+    const uploadRes = await uploadFile(kybFile.value, 'merchant-kyb')
     const fileUrl = uploadRes.url
 
     await submitKybMutation.mutateAsync({

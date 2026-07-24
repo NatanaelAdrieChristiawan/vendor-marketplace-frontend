@@ -181,7 +181,7 @@ async function submitDelivery() {
   isSubmitting.value = true
   try {
     for (const file of rawFiles.value) {
-      const uploadRes = await uploadFile(file, 'merchant-assets')
+      const uploadRes = await uploadFile(file, 'deliverables')
       const fileUrl = uploadRes.url || uploadRes.data?.url
       if (!fileUrl) throw new Error('Gagal mengunggah file')
       await api.post('/deliverables', {
